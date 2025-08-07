@@ -10,6 +10,8 @@ services:
     volumes:
       - ./nginx:/etc/nginx
       - acme:/etc/resty-auto-ssl
+    command: >
+      sh -c "resty-auto-ssl start-server & openresty -g 'daemon off;'"
     restart: unless-stopped
 
 volumes:
