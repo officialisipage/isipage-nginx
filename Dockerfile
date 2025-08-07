@@ -15,4 +15,6 @@ RUN mkdir -p /etc/nginx/ssl && \
 WORKDIR /etc/nginx
 
 # 🟢 Ini bagian penting agar Nginx (OpenResty) benar-benar dijalankan
-CMD ["openresty", "-g", "daemon off;"]
+
+# ✅ Inilah bagian yang sebelumnya hilang:
+CMD ["/usr/local/openresty/bin/openresty", "-g", "daemon off;"]
