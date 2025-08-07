@@ -10,7 +10,7 @@ RUN mkdir -p /opt/lua-resty-auto-ssl && \
 
 # Dummy cert untuk fallback SSL
 RUN mkdir -p /etc/nginx/ssl && \
-    openssl req -x509 -newkey rsa:2048 -keyout /etc/nginx/ssl/dummy.key -out /etc/nginx/ssl/dummy.crt -days 3650 -nodes -subj "/CN=localhost"
+    openssl req -x509 -newkey rsa:2048 -keyout /etc/nginx/dummy.key -out /etc/nginx/dummy.crt -days 3650 -nodes -subj "/CN=localhost"
 
 WORKDIR /etc/nginx
 
