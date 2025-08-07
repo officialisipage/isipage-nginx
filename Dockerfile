@@ -1,6 +1,7 @@
 FROM openresty/openresty:alpine
 
-RUN apk add --no-cache openssl \
- && opm get knyar/lua-resty-auto-ssl
+# Tambahkan perl agar opm bisa berjalan
+RUN apk add --no-cache openssl perl \
+  && opm get knyar/lua-resty-auto-ssl
 
 WORKDIR /etc/nginx
