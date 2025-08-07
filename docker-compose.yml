@@ -8,5 +8,6 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+      - ./nginx/domain.json:/etc/nginx/domain.json
       - ./nginx/lua:/etc/nginx/lua
       - ./nginx/ssl:/etc/nginx/ssl

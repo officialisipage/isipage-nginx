@@ -1,12 +1,14 @@
--- router.lua
-local ngx = ngx
-local uri = ngx.var.request_uri
+local domains = ngx.shared.domains
+local host = ngx.var.host
 
--- Contoh routing dinamis sederhana
-if uri:find("^/api/") then
-    ngx.var.upstream = "127.0.0.1:3000"
-elseif uri:find("^/admin/") then
-    ngx.var.upstream = "127.0.0.1:8080"
+-- Cek domain di shared memory
+local target = domains:get(host)
+
+if target then
+    ngx.var.upstream = target
 else
-    ngx.var.upstream = "127.0.0.1:5000"
+    -- fallback ke default backend atau tolak
+    ngx.status = 404
+    ngx.say("Domain not registered")
+    ngx.exit(ngx.HTTP_NOT_FOUND)
 end
