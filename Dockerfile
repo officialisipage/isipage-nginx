@@ -17,4 +17,6 @@ WORKDIR /etc/nginx
 # 🟢 Ini bagian penting agar Nginx (OpenResty) benar-benar dijalankan
 
 # ✅ Inilah bagian yang sebelumnya hilang:
-CMD ["/usr/local/openresty/bin/openresty", "-g", "daemon off;"]
+ENV OPENRESTY_CONF=/etc/nginx/nginx.conf
+CMD ["/usr/local/openresty/bin/openresty", "-c", "/etc/nginx/nginx.conf", "-g", "daemon off;"]
+
