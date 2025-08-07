@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  nginx:
+    build: .
+    container_name: isipage-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/:/etc/nginx/
+    restart: always
