@@ -9,5 +9,6 @@ services:
     volumes:
       - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
       - ./nginx/domains.json:/etc/nginx/domains.json
+      - ./nginx/log:/var/log/nginx
       - ./nginx/lua:/etc/nginx/lua
       - ./nginx/ssl:/etc/nginx/ssl
