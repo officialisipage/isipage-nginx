@@ -1,14 +1,16 @@
-version: '3'
+version: "3"
+
 services:
-  proxy:
-    image: openresty/openresty:alpine
-    container_name: openresty-proxy
+  nginx:
+    build: .
+    container_name: isipage-nginx
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
-      - ./nginx/domains.json:/etc/nginx/domains.json
-      - ./nginx/log:/var/log/nginx
-      - ./nginx/lua:/etc/nginx/lua
-      - ./nginx/ssl:/etc/nginx/ssl
+      - ./nginx:/etc/nginx
+      - acme:/etc/resty-auto-ssl
+    restart: unless-stopped
+
+volumes:
+  acme:
