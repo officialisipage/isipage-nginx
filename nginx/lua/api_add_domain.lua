@@ -42,12 +42,17 @@ else
   return
 end
 
--- Jalankan certbot
+-- Jalankan certbot (redirect output ke file agar bisa dibaca Lua)
+local tmpfile = "/tmp/certbot_output.txt"
 local cmd = "certbot certonly --webroot -w /var/www/certbot -d " .. domain ..
             " --non-interactive --agree-tos -m admin@" .. domain .. " --expand"
-local handle = io.popen(cmd)
-local output = handle:read("*a")
-handle:close()
+local full_cmd = cmd .. " > " .. tmpfile .. " 2>&1"
+os.execute(full_cmd)
+
+-- Baca hasil output certbot
+local f = io.open(tmpfile, "r")
+local output = f and f:read("*a") or "(no output)"
+if f then f:close() end
 
 -- Cek apakah cert berhasil
 local cert_path = "/etc/letsencrypt/live/" .. domain .. "/fullchain.pem"
