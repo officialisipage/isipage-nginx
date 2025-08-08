@@ -10,14 +10,20 @@ RUN apk update && apk add --no-cache \
     lua-resty-core \
     lua-resty-lrucache
 
-RUN mkdir -p /var/lib/certbot && chmod -R 777 /var/lib/certbot
-RUN mkdir -p /var/www/certbot && chmod -R 777 /var/www/certbot
 
-RUN mkdir -p /var/www/certbot/.well-known/acme-challenge && \
-    chmod -R 777 /var/www/certbot
+RUN mkdir -p /var/www/certbot/.well-known/acme-challenge \
+    && mkdir -p /var/lib/certbot \
+    && chmod -R 777 /var/www/certbot \
+    && chmod -R 777 /var/lib/certbot \
+    && chmod -R 777 /tmp
+
 
 RUN mkdir -p /var/www/certbot /etc/nginx/lua && \
-    touch /etc/nginx/domains.json
+    touch /etc/nginx/domains.json \
+    && chmod -R 777 /etc/nginx/domains.json\
+    && chown root /etc/nginx/domains.json
+
+
 
 RUN mkdir -p /var/log/nginx && \
     touch /var/log/nginx/access.log /var/log/nginx/error.log
