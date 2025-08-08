@@ -16,4 +16,5 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt                # Persist SSL
       - ./certbot-challenge:/var/www/certbot             # Persist challenge
       - ./domains.json:/etc/nginx/domains.json           # Persist domain map
+      - ./nginx/logs:/var/log/nginx
     restart: always
