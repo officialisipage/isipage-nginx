@@ -12,9 +12,6 @@ RUN apk update && apk add --no-cache \
 RUN mkdir -p /var/lib/certbot && chmod -R 777 /var/lib/certbot
 RUN mkdir -p /var/www/certbot && chmod -R 777 /var/www/certbot
 
-RUN mkdir -p /var/www/certbot/.well-known/acme-challenge && \
-    chmod -R 777 /var/www/certbot
-
 RUN mkdir -p /var/www/certbot /etc/nginx/lua && \
     touch /etc/nginx/domains.json
 

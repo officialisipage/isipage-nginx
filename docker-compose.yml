@@ -18,5 +18,4 @@ services:
       - ./nginx/logs:/var/log/nginx
       - ./certbot-challenge:/var/www/certbot
       - ./certbot-config:/tmp/certbot-config
-      
     restart: always
