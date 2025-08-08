@@ -50,7 +50,7 @@ local function run_certbot(premature, domain, target)
   local cmd = "certbot certonly --webroot -w /var/www/certbot -d " .. domain ..
     " --non-interactive --agree-tos -m admin@" .. domain ..
     " --expand --logs-dir /tmp --work-dir /tmp --config-dir " .. cert_dir ..
-    " --no-permissions-check"
+    " --no-permissions-check" ..
     " > " .. tmpfile .. " 2>&1"
 
   os.execute(cmd)
