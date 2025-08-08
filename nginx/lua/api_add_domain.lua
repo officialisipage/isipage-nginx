@@ -58,7 +58,7 @@ local output = f and f:read("*a") or "(no output)"
 if f then f:close() end
 
 -- Cek apakah cert berhasil
-local cert_path = "/etc/letsencrypt/live/" .. domain .. "/fullchain.pem"
+local cert_path = cert_dir .. "/live/" .. domain .. "/fullchain.pem"
 local test_cert = io.open(cert_path, "r")
 if not test_cert then
   ngx.status = 500
@@ -67,8 +67,14 @@ if not test_cert then
 end
 test_cert:close()
 
--- Reload nginx
-os.execute("nginx -s reload")
+-- ✅ Reload nginx menggunakan ngx.timer agar tidak reset koneksi
+local function reload_nginx(premature)
+  if not premature then
+    os.execute("nginx -s reload")
+  end
+end
+ngx.timer.at(0.1, reload_nginx)
 
+-- Kirim respons ke client setelah semuanya sukses
 ngx.status = 200
 ngx.say("✅ Domain added and SSL ready: ", domain)
