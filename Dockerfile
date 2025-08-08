@@ -8,8 +8,7 @@ RUN apk update && apk add --no-cache \
     lua-resty-lrucache
 
 RUN mkdir -p /var/www/certbot /etc/nginx/lua && \
-    touch /etc/nginx/domains.json && \
-    chown -R nginx:nginx /var/www/certbot /etc/nginx/domains.json
+    touch /etc/nginx/domains.json
 
 WORKDIR /usr/local/openresty/nginx
 CMD ["/usr/local/openresty/bin/openresty", "-g", "daemon off;"]
