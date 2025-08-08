@@ -14,9 +14,13 @@ end
 domains:set(domain, target)
 
 local filepath = "/etc/nginx/domains.json"
+local content = "{}"
 local file = io.open(filepath, "r")
-local content = file and file:read("*a") or "{}"
-if file then file:close() end
+if file then
+    content = file:read("*a")
+    file:close()
+end
+
 
 local ok, data = pcall(cjson.decode, content)
 if not ok then data = {} end
