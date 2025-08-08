@@ -68,12 +68,12 @@ end
 test_cert:close()
 
 -- ✅ Reload nginx menggunakan ngx.timer agar tidak reset koneksi
-local function reload_nginx(premature)
-  if not premature then
-    os.execute("nginx -s reload")
-  end
-end
-ngx.timer.at(0.1, reload_nginx)
+-- local function reload_nginx(premature)
+--   if not premature then
+--     os.execute("nginx -s reload")
+--   end
+-- end
+-- ngx.timer.at(0.1, reload_nginx)
 
 -- Kirim respons ke client setelah semuanya sukses
 ngx.status = 200
