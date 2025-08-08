@@ -2,15 +2,19 @@ version: "3"
 
 services:
   nginx:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: isipage-nginx
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx:/etc/nginx
-      - acme:/etc/resty-auto-ssl
-    restart: unless-stopped
-  
-volumes:
-  acme:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/mime.types:/etc/nginx/mime.types
+      - ./nginx/lua:/etc/nginx/lua
+      - ./nginx/ssl:/etc/nginx/ssl
+      - /etc/letsencrypt:/etc/letsencrypt
+      - ./certbot-challenge:/var/www/certbot
+      - ./domains.json:/etc/nginx/domains.json
+    restart: always
