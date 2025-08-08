@@ -23,6 +23,7 @@ RUN mkdir -p /var/log/nginx && \
 
 RUN mkdir -p /var/log/letsencrypt && chown -R root:root /var/log/letsencrypt
 
+RUN echo "nginx ALL=(ALL) NOPASSWD: /usr/bin/certbot" >> /etc/sudoers
 WORKDIR /usr/local/openresty/nginx
 EXPOSE 80 443
 CMD ["/usr/local/openresty/bin/openresty", "-g", "daemon off;"]
