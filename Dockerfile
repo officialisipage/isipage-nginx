@@ -9,6 +9,8 @@ RUN apk update && apk add --no-cache \
     lua-resty-core \
     lua-resty-lrucache
 
+RUN mkdir -p /var/lib/certbot && chmod -R 777 /var/lib/certbot
+
 RUN mkdir -p /var/www/certbot /etc/nginx/lua && \
     touch /etc/nginx/domains.json
 

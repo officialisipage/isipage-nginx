@@ -13,7 +13,7 @@ services:
       - ./nginx/mime.types:/etc/nginx/mime.types
       - ./nginx/lua:/etc/nginx/lua
       - ./nginx/ssl:/etc/nginx/ssl
-      - /etc/letsencrypt:/etc/letsencrypt                # Persist SSL
+      # - /etc/letsencrypt:/etc/letsencrypt                # Persist SSL
       - ./domains.json:/etc/nginx/domains.json           # Persist domain map
       - ./nginx/logs:/var/log/nginx
       - ./certbot-challenge:/var/www/certbot
