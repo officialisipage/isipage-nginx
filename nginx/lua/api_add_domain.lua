@@ -44,9 +44,9 @@ end
 
 -- Jalankan certbot (redirect output ke file agar bisa dibaca Lua)
 local tmpfile = "/tmp/certbot_output.txt"
-local cmd = "sudo certbot certonly --webroot -w /var/www/certbot -d " .. domain ..
+local cmd = "certbot certonly --webroot -w /var/www/certbot -d " .. domain ..
   " --non-interactive --agree-tos -m admin@" .. domain ..
-  " --expand --logs-dir /tmp --work-dir /tmp --config-dir /etc/letsencrypt"
+  " --expand --logs-dir /tmp --work-dir /tmp --config-dir /tmp/certbot-config"
 local full_cmd = cmd .. " > " .. tmpfile .. " 2>&1"
 os.execute(full_cmd)
 
