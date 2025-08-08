@@ -16,7 +16,7 @@ RUN mkdir -p /var/www/certbot/.well-known/acme-challenge && \
     chmod -R 777 /var/www/certbot
 
 RUN mkdir -p /var/www/certbot /etc/nginx/lua && \
-    touch /etc/nginx/domains.json
+    touch /var/domains.json 
 
 RUN mkdir -p /var/log/nginx && \
     touch /var/log/nginx/access.log /var/log/nginx/error.log

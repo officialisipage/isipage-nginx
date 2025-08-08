@@ -2,7 +2,7 @@ local json = require("cjson")
 local domains = ngx.shared.domains
 
 local function load_domains()
-    local file = io.open("/etc/nginx/domains.json", "r")
+    local file = io.open("/var/domains.json", "r")
     if not file then
         ngx.log(ngx.ERR, "⚠️  Cannot open domains.json")
         return

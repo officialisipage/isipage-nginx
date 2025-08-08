@@ -7,7 +7,7 @@ local target = domains:get(host)
 
 -- Jika tidak ditemukan, fallback baca dari file
 if not target then
-    local file = io.open("/etc/nginx/domains.json", "r")
+    local file = io.open("/var/domains.json", "r")
     if file then
         local content = file:read("*a")
         file:close()

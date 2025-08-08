@@ -15,7 +15,7 @@ end
 domains:set(domain, target)
 
 -- Baca file domains.json (jika ada)
-local filepath = "/etc/nginx/domains.json"
+local filepath = "/var/domains.json"
 local content = "{}"
 
 local f = io.open(filepath, "r")
