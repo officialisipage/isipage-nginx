@@ -3,6 +3,7 @@ FROM openresty/openresty:alpine
 RUN apk add --no-cache sudo
 
 RUN apk update && apk add --no-cache \
+    nano \
     certbot \
     bash \
     curl \
