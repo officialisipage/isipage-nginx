@@ -1,5 +1,4 @@
-version: "3"
-
+version: '3'
 services:
   nginx:
     build:
@@ -14,7 +13,7 @@ services:
       - ./nginx/mime.types:/etc/nginx/mime.types
       - ./nginx/lua:/etc/nginx/lua
       - ./nginx/ssl:/etc/nginx/ssl
-      - /etc/letsencrypt:/etc/letsencrypt
-      - ./certbot-challenge:/var/www/certbot
-      - ./domains.json:/etc/nginx/domains.json
+      - /etc/letsencrypt:/etc/letsencrypt                # Persist SSL
+      - ./certbot-challenge:/var/www/certbot             # Persist challenge
+      - ./domains.json:/etc/nginx/domains.json           # Persist domain map
     restart: always

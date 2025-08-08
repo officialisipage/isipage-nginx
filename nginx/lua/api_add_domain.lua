@@ -26,10 +26,8 @@ file = io.open(filepath, "w+")
 file:write(cjson.encode(data))
 file:close()
 
--- Jalankan certbot
-local email = "admin@" .. domain
 local cmd = "certbot certonly --webroot -w /var/www/certbot -d " .. domain ..
-            " --non-interactive --agree-tos -m " .. email .. " --expand"
+            " --non-interactive --agree-tos -m admin@" .. domain .. " --expand"
 local handle = io.popen(cmd)
 local output = handle:read("*a")
 handle:close()
