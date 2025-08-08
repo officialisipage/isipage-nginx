@@ -1,14 +1,19 @@
 version: '3'
 services:
-  proxy:
-    image: openresty/openresty:alpine
-    container_name: openresty-proxy
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: isipage-nginx
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
-      - ./nginx/domains.json:/etc/nginx/domains.json
-      - ./nginx/log:/var/log/nginx
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/mime.types:/etc/nginx/mime.types
       - ./nginx/lua:/etc/nginx/lua
       - ./nginx/ssl:/etc/nginx/ssl
+      - /etc/letsencrypt:/etc/letsencrypt
+      - ./certbot-challenge:/var/www/certbot
+      - ./domains.json:/etc/nginx/domains.json
+    restart: always
