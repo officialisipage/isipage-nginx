@@ -16,14 +16,13 @@ RUN mkdir -p /var/www/certbot/.well-known/acme-challenge && \
     chmod -R 777 /var/www/certbot
 
 RUN mkdir -p /var/www/certbot /etc/nginx/lua && \
-    touch /var/domains.json 
+    touch /etc/nginx/domains.json
 
 RUN mkdir -p /var/log/nginx && \
     touch /var/log/nginx/access.log /var/log/nginx/error.log
 
 RUN mkdir -p /var/log/letsencrypt && chown -R root:root /var/log/letsencrypt
 
-RUN echo "nginx ALL=(ALL) NOPASSWD: /usr/bin/certbot" >> /etc/sudoers
 WORKDIR /usr/local/openresty/nginx
-EXPOSE 80 443
+USER root
 CMD ["/usr/local/openresty/bin/openresty", "-g", "daemon off;"]

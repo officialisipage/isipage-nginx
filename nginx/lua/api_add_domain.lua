@@ -11,70 +11,66 @@ if not domain then
   return
 end
 
--- Simpan ke shared memory
 domains:set(domain, target)
 
--- Baca file domains.json (jika ada)
-local filepath = "/var/domains.json"
+-- Update file JSON
+local filepath = "/etc/nginx/domains.json"
 local content = "{}"
 
-local f = io.open(filepath, "r")
-if f then
-  content = f:read("*a")
-  f:close()
+do
+  local f = io.open(filepath, "r")
+  if f then
+    content = f:read("*a")
+    f:close()
+  end
 end
 
--- Decode atau fallback ke tabel kosong
 local ok, data = pcall(cjson.decode, content)
 if not ok then data = {} end
-
--- Tambah domain ke mapping
 data[domain] = target
 
--- Simpan ulang ke file
-local wf = io.open(filepath, "w+")
-if wf then
-  wf:write(cjson.encode(data))
-  wf:close()
-else
-  ngx.status = 500
-  ngx.say("❌ Gagal menulis ke domains.json")
-  return
+do
+  local wf = io.open(filepath, "w+")
+  if wf then
+    wf:write(cjson.encode(data))
+    wf:close()
+  else
+    ngx.status = 500
+    ngx.say("❌ Failed to write domains.json")
+    return
+  end
 end
 
--- Jalankan certbot (redirect output ke file agar bisa dibaca Lua)
-local tmpfile = "/tmp/certbot_output.txt"
-local cert_dir = "/var/lib/certbot"
-local cmd = "certbot certonly --webroot -w /var/www/certbot -d " .. domain ..
-  " --non-interactive --agree-tos -m admin@" .. domain ..
-  " --expand --logs-dir /tmp --work-dir /tmp --config-dir " .. cert_dir
+-- ✅ Run certbot + reload async
+local function run_certbot(premature, domain, target)
+  if premature then return end
 
-local full_cmd = cmd .. " > " .. tmpfile .. " 2>&1"
-os.execute(full_cmd)
+  local tmpfile = "/tmp/certbot_output.txt"
+  local cert_dir = "/var/lib/certbot"
+  local cmd = "certbot certonly --webroot -w /var/www/certbot -d " .. domain ..
+    " --non-interactive --agree-tos -m admin@" .. domain ..
+    " --expand --logs-dir /tmp --work-dir /tmp --config-dir " .. cert_dir ..
+    " > " .. tmpfile .. " 2>&1"
 
--- Baca hasil output certbot
-local f = io.open(tmpfile, "r")
-local output = f and f:read("*a") or "(no output)"
-if f then f:close() end
+  os.execute(cmd)
 
--- Cek apakah cert berhasil
-local cert_path = cert_dir .. "/live/" .. domain .. "/fullchain.pem"
-local test_cert = io.open(cert_path, "r")
-if not test_cert then
-  ngx.status = 500
-  ngx.say("❌ Certbot failed. Output:\n", output)
-  return
+  local cert_path = cert_dir .. "/live/" .. domain .. "/fullchain.pem"
+  local test = io.open(cert_path, "r")
+  if test then
+    test:close()
+    ngx.log(ngx.INFO, "✅ Certbot success for " .. domain)
+    os.execute("nginx -s reload")
+  else
+    local f = io.open(tmpfile, "r")
+    local output = f and f:read("*a") or "(no output)"
+    if f then f:close() end
+    ngx.log(ngx.ERR, "❌ Certbot failed for " .. domain .. "\n" .. output)
+  end
 end
-test_cert:close()
 
--- ✅ Reload nginx menggunakan ngx.timer agar tidak reset koneksi
--- local function reload_nginx(premature)
---   if not premature then
---     os.execute("nginx -s reload")
---   end
--- end
--- ngx.timer.at(0.1, reload_nginx)
+-- Jalankan certbot async
+ngx.timer.at(0.1, run_certbot, domain, target)
 
--- Kirim respons ke client setelah semuanya sukses
+-- ✅ Kirim response langsung ke client
 ngx.status = 200
-ngx.say("✅ Domain added and SSL ready: ", domain)
+ngx.say("🕓 Certbot sedang diproses di background untuk: ", domain)
