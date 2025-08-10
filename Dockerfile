@@ -1,37 +1,29 @@
-FROM openresty/openresty:alpine
+FROM debian:12
 
-# install sistem deps
-RUN apk add --no-cache python3 py3-pip bash curl certbot openssl jq
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    nginx \
+    python3 python3-pip \
+    lua-nginx-module \
+    certbot \
+    python3-certbot-nginx \
+    supervisor \
+    && rm -rf /var/lib/apt/lists/*
 
-# buat virtualenv untuk Python
-RUN python3 -m venv /venv
-ENV PATH="/venv/bin:$PATH"
-
-# install python deps di virtualenv
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
-
-# buat direktori
-RUN mkdir -p /etc/nginx/conf.d /etc/nginx/ssl /var/www/certbot /app /var/log/letsencrypt /tmp/dummy_certs
-
-# copy app + nginx conf + assets
-COPY app.py /app/app.py
-COPY utils.py /app/utils.py
-COPY nginx.conf /etc/nginx/nginx.conf
-COPY domains.json /etc/nginx/domains.json
-COPY www /var/www
+# Install Python deps
 COPY requirements.txt /app/requirements.txt
+RUN pip3 install --no-cache-dir -r /app/requirements.txt
+
+# Copy config supervisor
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Copy nginx config & Python API
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY app /app
 
 WORKDIR /app
 
-# generate dummy certs sehingga OpenResty bisa start
-RUN openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-  -subj "/CN=dummy" -keyout /etc/nginx/ssl/dummy.key -out /etc/nginx/ssl/dummy.crt
+# Expose ports
+EXPOSE 80 443
 
-# izin untuk webroot & cert dirs
-RUN chmod -R 777 /var/www/certbot /etc/nginx/ssl || true
-
-EXPOSE 80 443 5000
-
-# jalankan Flask API di background lalu OpenResty di foreground
-CMD ["sh", "-c", "python /app/app.py & /usr/local/openresty/bin/openresty -g 'daemon off;'"]
+CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
