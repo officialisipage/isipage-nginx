@@ -1,22 +1,18 @@
-version: '3'
+version: "3.8"
 services:
-  nginx:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: isipage-nginx
+  isipage:
+    build: .
+    container_name: isipage-nginx-python
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
-      - ./nginx/mime.types:/etc/nginx/mime.types
-      - ./nginx/lua:/etc/nginx/lua
-      - ./nginx/ssl:/etc/nginx/ssl
-      # - /etc/letsencrypt:/etc/letsencrypt                # Persist SSL
-      - ./domains.json:/etc/nginx/domains.json           # Persist domain map
-      - ./nginx/logs:/var/log/nginx
-      # - ./certbot-challenge:/var/www/certbot
-      # - ./certbot-config:/tmp/certbot-config
-      
-    restart: always
+      - ./domains.json:/etc/nginx/domains.json
+      - ./nginx_ssl:/etc/nginx/ssl          # persistent storage untuk ssl per-domain
+      - ./www/certbot:/var/www/certbot      # webroot ACME
+      - ./nginx_logs:/var/log/nginx
+      - ./letsencrypt:/etc/letsencrypt      # certbot native storage
+    environment:
+      - API_KEY=change_me_super_secret       # ganti sebelum run
+      - FLASK_ENV=production
+    restart: unless-stopped

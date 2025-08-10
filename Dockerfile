@@ -1,35 +1,33 @@
 FROM openresty/openresty:alpine
 
-RUN apk add --no-cache sudo
+# install sistem deps
+RUN apk add --no-cache python3 py3-pip bash curl certbot openssl jq
 
-RUN apk update && apk add --no-cache \
-    nano \
-    certbot \
-    bash \
-    curl \
-    lua-resty-core \
-    lua-resty-lrucache
+# install python deps
+COPY requirements.txt /tmp/requirements.txt
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 
+# buat direktori
+RUN mkdir -p /etc/nginx/conf.d /etc/nginx/ssl /var/www/certbot /app /var/log/letsencrypt /tmp/dummy_certs
 
-RUN mkdir -p /var/www/certbot/.well-known/acme-challenge \
-    && mkdir -p /var/lib/certbot \
-    && chmod -R 777 /var/www/certbot \
-    && chmod -R 777 /var/lib/certbot \
-    && chmod -R 777 /tmp
+# copy app + nginx conf + assets
+COPY app.py /app/app.py
+COPY utils.py /app/utils.py
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY domains.json /etc/nginx/domains.json
+COPY www /var/www
+COPY requirements.txt /app/requirements.txt
 
+WORKDIR /app
 
-RUN mkdir -p /var/www/certbot /etc/nginx/lua && \
-    touch /etc/nginx/domains.json \
-    && chmod -R 777 /etc/nginx/domains.json\
-    && chown root /etc/nginx/domains.json
+# generate dummy certs sehingga OpenResty bisa start
+RUN openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+  -subj "/CN=dummy" -keyout /etc/nginx/ssl/dummy.key -out /etc/nginx/ssl/dummy.crt
 
+# izin untuk webroot & cert dirs
+RUN chmod -R 777 /var/www/certbot /etc/nginx/ssl || true
 
+EXPOSE 80 443 5000
 
-RUN mkdir -p /var/log/nginx && \
-    touch /var/log/nginx/access.log /var/log/nginx/error.log
-
-RUN mkdir -p /var/log/letsencrypt && chown -R root:root /var/log/letsencrypt
-
-WORKDIR /usr/local/openresty/nginx
-USER root
-CMD ["/usr/local/openresty/bin/openresty", "-g", "daemon off;"]
+# jalankan Flask API di background lalu OpenResty di foreground
+CMD ["sh", "-c", "python3 /app/app.py & /usr/local/openresty/bin/openresty -g 'daemon off;'"]
