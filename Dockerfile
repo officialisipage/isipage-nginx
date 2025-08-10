@@ -3,9 +3,13 @@ FROM openresty/openresty:alpine
 # install sistem deps
 RUN apk add --no-cache python3 py3-pip bash curl certbot openssl jq
 
-# install python deps
+# buat virtualenv untuk Python
+RUN python3 -m venv /venv
+ENV PATH="/venv/bin:$PATH"
+
+# install python deps di virtualenv
 COPY requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
 # buat direktori
 RUN mkdir -p /etc/nginx/conf.d /etc/nginx/ssl /var/www/certbot /app /var/log/letsencrypt /tmp/dummy_certs
@@ -30,4 +34,4 @@ RUN chmod -R 777 /var/www/certbot /etc/nginx/ssl || true
 EXPOSE 80 443 5000
 
 # jalankan Flask API di background lalu OpenResty di foreground
-CMD ["sh", "-c", "python3 /app/app.py & /usr/local/openresty/bin/openresty -g 'daemon off;'"]
+CMD ["sh", "-c", "python /app/app.py & /usr/local/openresty/bin/openresty -g 'daemon off;'"]
