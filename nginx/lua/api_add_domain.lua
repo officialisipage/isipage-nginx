@@ -1,74 +1,85 @@
 local cjson = require "cjson.safe"
 local domains = ngx.shared.domains
 
+-- Ambil body JSON (kalau ada) + query
 ngx.req.read_body()
-local body = cjson.decode(ngx.req.get_body_data() or "") or {}
+local body = ngx.req.get_body_data()
+local data = body and cjson.decode(body) or {}
+
 local args = ngx.req.get_uri_args() or {}
 
-local domain = (body.domain or args.domain or ""):lower()
-local target = body.target or args.target or "103.250.11.31:2000"
+local domain = (data and data.domain) or args["domain"]
+local target = (data and data.target) or args["target"] or "103.250.11.31:2000"
 
-if domain == "" or not string.find(domain, "%.") then
+if not domain or not domain:find("%.") then
   ngx.status = 400
-  ngx.say(cjson.encode({ ok=false, message="Invalid domain" }))
+  ngx.say("❌ Invalid/missing domain")
   return
 end
 
+-- Update cache
 domains:set(domain, target)
 
--- Atomic write to /etc/nginx/domains.json
-local path = "/etc/nginx/domains.json"
-local old = "{}"
+-- Atomic write domains.json
+local filepath = "/etc/nginx/domains.json"
+local content = "{}"
 do
-  local f = io.open(path, "r")
-  if f then old = f:read("*a"); f:close() end
+  local f = io.open(filepath, "r")
+  if f then content = f:read("*a"); f:close() end
 end
-local data = cjson.decode(old) or {}
-data[domain] = target
+local ok, data_json = pcall(cjson.decode, content)
+if not ok or type(data_json) ~= "table" then data_json = {} end
+data_json[domain] = target
 
-local tmp = path .. ".tmp"
-local f = io.open(tmp, "w")
-if not f then
-  ngx.status = 500
-  ngx.say(cjson.encode({ ok=false, message="Failed to write temp file" }))
-  return
+local tmp = filepath .. ".tmp"
+do
+  local wf = io.open(tmp, "w")
+  if not wf then
+    ngx.status = 500
+    ngx.say("❌ Cannot open temp domains file")
+    return
+  end
+  wf:write(cjson.encode(data_json))
+  wf:close()
 end
-f:write(cjson.encode(data)); f:close()
-os.execute(string.format("mv -f %q %q && chgrp nginx %q && chmod 664 %q", tmp, path, path, path))
+os.execute(string.format("mv %q %q && chmod 664 %q && chgrp nginx %q 2>/dev/null || true", tmp, filepath, filepath, filepath))
 
--- Certbot async issuance
-local function run_certbot(premature, d)
+-- Jalankan Certbot async + perbaiki permission + reload
+local function run_certbot(premature, dom)
   if premature then return end
-  local cert_dir = "/var/lib/certbot"
-  local webroot = "/var/www/certbot"
-  local email = "admin@" .. d
-  local out = "/tmp/certbot_output.txt"
 
-  local cmd = string.format([[certbot certonly --webroot -w %s -d %s --non-interactive --agree-tos -m %s --expand --logs-dir /tmp --work-dir /tmp --config-dir %s --no-permissions-check > %s 2>&1]],
-    webroot, d, email, cert_dir, out)
+  local tmpfile  = "/tmp/certbot_output.txt"
+  local cert_dir = "/var/lib/certbot"
+
+  local cmd = string.format(
+    "certbot certonly --webroot -w /var/www/certbot -d %q --non-interactive --agree-tos -m admin@%s --expand --logs-dir /tmp --work-dir /tmp --config-dir %q --no-permissions-check > %s 2>&1",
+    dom, dom, cert_dir, tmpfile
+  )
+
   os.execute(cmd)
 
-  local live = cert_dir .. "/live/" .. d
-  local key = live .. "/privkey.pem"
-  local crt = live .. "/fullchain.pem"
-  os.execute("chgrp nginx " .. key .. " " .. crt .. " 2>/dev/null || true")
-  os.execute("chmod 640 " .. key .. " 2>/dev/null || true")
-  os.execute("chmod 644 " .. crt .. " 2>/dev/null || true")
+  -- Fix perms jika sukses
+  local full = cert_dir .. "/live/" .. dom .. "/fullchain.pem"
+  local key  = cert_dir .. "/live/" .. dom .. "/privkey.pem"
 
-  local t = io.open(crt, "r")
-  if t then
-    t:close()
-    ngx.log(ngx.INFO, "Certbot success for " .. d)
+  local f1 = io.open(full, "r")
+  local f2 = io.open(key, "r")
+  if f1 and f2 then
+    f1:close(); f2:close()
+    os.execute(string.format("chgrp nginx %q %q 2>/dev/null || true", full, key))
+    os.execute(string.format("chmod 644 %q 2>/dev/null || true", full))
+    os.execute(string.format("chmod 640 %q 2>/dev/null || true", key))
     os.execute("nginx -s reload")
+    ngx.log(ngx.INFO, "✅ Cert issued & nginx reloaded for " .. dom)
   else
-    local f = io.open(out, "r")
-    local log = f and f:read("*a") or "(no output)"
-    if f then f:close() end
-    ngx.log(ngx.ERR, "Certbot failed for " .. d .. "\n" .. log)
+    local fo = io.open(tmpfile, "r")
+    local out = fo and fo:read("*a") or "(no output)"
+    if fo then fo:close() end
+    ngx.log(ngx.ERR, "❌ Certbot failed for " .. dom .. "\\n" .. out)
   end
 end
 
 ngx.timer.at(0.01, run_certbot, domain)
 
-ngx.header["Content-Type"] = "application/json"
-ngx.say(cjson.encode({ ok=true, message="Certbot running in background", domain=domain, target=target }))
+ngx.status = 200
+ngx.say("🕓 Certbot diproses background untuk: ", domain, " → ", target)
