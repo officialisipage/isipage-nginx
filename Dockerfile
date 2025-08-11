@@ -7,8 +7,18 @@ COPY nginx/mime.types /etc/nginx/mime.types
 COPY nginx/lua /etc/nginx/lua
 COPY domains.json /etc/nginx/domains.json
 
-RUN mkdir -p /var/www/certbot/.well-known/acme-challenge     && mkdir -p /var/lib/certbot     && mkdir -p /etc/nginx/ssl     && touch /var/log/nginx/access.log /var/log/nginx/error.log
+# Buat user+group nginx (aman kalau sudah ada)
+RUN addgroup -S nginx 2>/dev/null || true \
+    && adduser -S -G nginx nginx 2>/dev/null || true
 
+# Siapkan webroot, certbot, ssl, dan logs
+RUN mkdir -p /var/www/certbot/.well-known/acme-challenge \
+    && mkdir -p /var/lib/certbot \
+    && mkdir -p /etc/nginx/ssl \
+    && mkdir -p /var/log/nginx \
+    && touch /var/log/nginx/access.log /var/log/nginx/error.log \
+    && chown -R nginx:nginx /var/log/nginx /var/www/certbot /var/lib/certbot /etc/nginx/ssl
+    
 COPY nginx/ssl /etc/nginx/ssl
 
 COPY fixperms-and-reload.sh /usr/local/bin/fixperms-and-reload.sh

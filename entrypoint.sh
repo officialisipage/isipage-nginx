@@ -3,6 +3,10 @@ set -euo pipefail
 
 addgroup -S nginx 2>/dev/null || true
 
+mkdir -p /var/log/nginx
+touch /var/log/nginx/access.log /var/log/nginx/error.log
+chown -R nginx:nginx /var/log/nginx
+
 mkdir -p /var/www/certbot/.well-known/acme-challenge
 chmod -R 755 /var/www/certbot || true
 
