@@ -1,2 +1,7 @@
-nginx/domain.json
-nginx/log/*
+nginx/logs/*
+!nginx/logs/.gitkeep
+data/certbot/**
+data/certbot-www/**
+auto_ssl/.venv/
+__pycache__/
+*.pyc

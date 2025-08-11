@@ -1,18 +1,42 @@
-version: "3.8"
+version: "3.9"
 services:
-  isipage:
+  openresty:
     build: .
-    container_name: isipage-nginx-python
+    container_name: isipage-nginx
     ports:
       - "80:80"
       - "443:443"
     volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/mime.types:/etc/nginx/mime.types:ro
+      - ./nginx/lua:/etc/nginx/lua:ro
       - ./domains.json:/etc/nginx/domains.json
-      - ./nginx_ssl:/etc/nginx/ssl          # persistent storage untuk ssl per-domain
-      - ./www/certbot:/var/www/certbot      # webroot ACME
-      - ./nginx_logs:/var/log/nginx
-      - ./letsencrypt:/etc/letsencrypt      # certbot native storage
+      - ./data/certbot:/var/lib/certbot
+      - ./data/certbot-www:/var/www/certbot
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      - auto-ssl
+    networks:
+      - isipage_net
+
+  auto-ssl:
+    build: ./auto_ssl
+    container_name: auto-ssl-api
     environment:
-      - API_KEY=change_me_super_secret       # ganti sebelum run
-      - FLASK_ENV=production
-    restart: unless-stopped
+      DOMAINS_JSON: /etc/nginx/domains.json
+      WEBROOT_DIR: /var/www/certbot
+      CERT_DIR: /var/lib/certbot
+      NGINX_CMD: "nginx -s reload"
+      NGINX_USER: "nginx"
+      PORT: "5001"
+    volumes:
+      - ./domains.json:/etc/nginx/domains.json
+      - ./data/certbot:/var/lib/certbot
+      - ./data/certbot-www:/var/www/certbot
+    networks:
+      - isipage_net
+
+networks:
+  isipage_net:
+    driver: bridge
