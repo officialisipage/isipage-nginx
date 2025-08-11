@@ -1,22 +1,27 @@
-local cjson = require "cjson.safe"
+local cjson = require("cjson.safe")
+local domains = ngx.shared.domains
 local host = ngx.var.host
 
 if not host or host == "" then
   return ngx.exit(444)
 end
 
-local f = io.open("/etc/nginx/domains.json", "r")
-if not f then
-  ngx.log(ngx.ERR, "domains.json not found")
-  return ngx.exit(444)
-end
-local content = f:read("*a"); f:close()
-local map = cjson.decode(content) or {}
-local upstream = map[host]
+local target = domains:get(host)
 
-if not upstream or upstream == "" then
-  ngx.log(ngx.WARN, "No upstream for host " .. host)
-  return ngx.exit(444)
+if not target then
+  local f = io.open("/etc/nginx/domains.json", "r")
+  if f then
+    local content = f:read("*a"); f:close()
+    local data = cjson.decode(content) or {}
+    target = data[host]
+    if target then domains:set(host, target) end
+  end
 end
 
-ngx.var.upstream = upstream
+if not target then
+  ngx.status = 404
+  ngx.say("Domain not registered: ", host)
+  return ngx.exit(ngx.HTTP_NOT_FOUND)
+end
+
+ngx.var.upstream = target

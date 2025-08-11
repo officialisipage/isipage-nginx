@@ -1,7 +1,5 @@
-nginx/logs/*
-!nginx/logs/.gitkeep
 data/certbot/**
 data/certbot-www/**
-auto_ssl/.venv/
+nginx/logs/*
 __pycache__/
 *.pyc
