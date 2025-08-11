@@ -1,17 +1,22 @@
-version: "3.9"
 services:
   openresty:
-    build: .
+    image: openresty/openresty:alpine
     container_name: isipage-nginx
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/mime.types:/etc/nginx/mime.types:ro
+      # CONF: pakai conf.d/*.conf (bukan /etc/nginx/nginx.conf)
+      - ./nginx/conf.d/isipage.conf:/etc/nginx/conf.d/isipage.conf:ro
+
+      # Lua & mime
       - ./nginx/lua:/etc/nginx/lua:ro
+      - ./nginx/mime.types:/etc/nginx/mime.types:ro
+
+      # Data dinamis
       - ./domains.json:/etc/nginx/domains.json
       - ./data/certbot:/var/lib/certbot
       - ./data/certbot-www:/var/www/certbot
+
+      # SSL statis & dummy
       - ./nginx/ssl:/etc/nginx/ssl
-      - ./nginx/logs:/var/log/nginx
