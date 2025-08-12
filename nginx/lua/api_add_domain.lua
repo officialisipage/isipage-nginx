@@ -9,20 +9,27 @@ local function read_body_json()
   return cjson.decode(b) or {}
 end
 
+-- ===== Ambil input =====
 local data = read_body_json()
 local args = ngx.req.get_uri_args() or {}
 
-local domain = (data.domain or args.domain or "")
-local target = (data.target or args.target or "103.250.11.31:2000")
+local domain = data.domain or args.domain
+local target = data.target or args.target or "103.250.11.31:2000"
 
-if domain == "" or not domain:find("%.") then
+-- Normalisasi: jadikan string kosong jika nil
+if domain == nil then domain = "" end
+if target == nil then target = "" end
+
+-- Validasi awal
+if domain == "" or not tostring(domain):find("%.") then
   ngx.status = 400
-  ngx.say(cjson.encode({ ok=false, message="Invalid domain" }))
+  ngx.header["Content-Type"] = "application/json"
+  ngx.say(cjson.encode({ ok=false, message="Invalid or missing 'domain' parameter" }))
   return
 end
 
 -- ===== Helper: atomic write domains.json =====
-local function upsert_domain(filepath, domain, target)
+local function upsert_domain(filepath, d, t)
   local json = require "cjson.safe"
   local map = {}
   do
@@ -32,7 +39,7 @@ local function upsert_domain(filepath, domain, target)
       f:close()
     end
   end
-  map[domain] = target
+  map[d] = t
   local out = json.encode(map) or "{}"
 
   local tmp = filepath .. ".tmp"
@@ -44,10 +51,15 @@ end
 
 -- ===== Helper: simple lock per-domain (120s) =====
 local function acquire_lock(d)
-  if not dict then return true, nil end
+  if not d or d == "" then
+    return false, nil, "empty_domain"
+  end
+  if not dict then
+    return true, nil, nil -- tidak ada shared dict; lanjut saja
+  end
   local key = "certbot_lock:" .. d
-  local ok = dict:add(key, 1, 120)
-  return ok, key
+  local ok = dict:add(key, 1, 120) -- lock 120 detik
+  return ok, key, nil
 end
 
 local function release_lock(key)
@@ -62,24 +74,23 @@ local function run_certbot(premature, d)
   local CERT_DIR  = "/var/lib/certbot"
   local LOGS_DIR  = CERT_DIR .. "/logs"
   local WORK_DIR  = CERT_DIR .. "/work"
+
   os.execute("mkdir -p " .. LOGS_DIR .. " " .. WORK_DIR)
 
   local logf = LOGS_DIR .. "/certbot_" .. d .. ".log"
 
-  local cmd = table.concat({
+  local parts = {
     CERTBOT, "certonly",
     "--webroot", "-w", "/var/www/certbot",
     "-d", d,
     "--non-interactive", "--agree-tos", "-m", "admin@"..d,
     "--config-dir", CERT_DIR,
     "--work-dir", WORK_DIR,
-    "--logs-dir", LOGS_DIR
-  }, " ")
+    "--logs-dir", LOGS_DIR,
+    -- "--staging", -- aktifkan untuk uji kalau perlu
+  }
+  local cmd = table.concat(parts, " ") .. " > " .. logf .. " 2>&1"
 
-  -- redirect ke log file
-  cmd = cmd .. " > " .. logf .. " 2>&1"
-
-  -- jalankan certbot
   os.execute(cmd)
 
   -- set permission agar Nginx bisa baca
@@ -97,11 +108,16 @@ upsert_domain(filepath, domain, target)
 if dict then dict:set(domain, target) end
 
 -- ===== Lock supaya tidak balapan =====
-local ok_lock, lock_key = acquire_lock(domain)
+local ok_lock, lock_key, lock_err = acquire_lock(domain)
 if not ok_lock then
-  ngx.status = 409
   ngx.header["Content-Type"] = "application/json"
-  ngx.say(cjson.encode({ ok=false, message="Certbot for this domain is already in progress" }))
+  if lock_err == "empty_domain" then
+    ngx.status = 400
+    ngx.say(cjson.encode({ ok=false, message="Missing 'domain' parameter" }))
+  else
+    ngx.status = 409
+    ngx.say(cjson.encode({ ok=false, message="Certbot for this domain is already in progress" }))
+  end
   return
 end
 
@@ -110,12 +126,13 @@ local ok, err = ngx.timer.at(0.05, function(premature)
   local ok2, err2 = pcall(run_certbot, premature, domain)
   release_lock(lock_key)
   if not ok2 then
-    ngx.log(ngx.ERR, "❌ Certbot error for " .. domain .. ": " .. (err2 or "?"))
+    ngx.log(ngx.ERR, "❌ Certbot error for " .. tostring(domain) .. ": " .. (err2 or "?"))
   end
 end)
 if not ok then
   release_lock(lock_key)
   ngx.status = 500
+  ngx.header["Content-Type"] = "application/json"
   ngx.say(cjson.encode({ ok=false, message="Failed to start certbot: "..(err or "?") }))
   return
 end
