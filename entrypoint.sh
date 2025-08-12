@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Directories
+# Setup awal (sama seperti sebelumnya)
 mkdir -p /var/www/certbot/.well-known/acme-challenge
 chmod -R 755 /var/www/certbot || true
 mkdir -p /var/lib/certbot
@@ -14,8 +14,8 @@ if [ ! -f /etc/nginx/ssl/dummy.key ] || [ ! -f /etc/nginx/ssl/dummy.crt ]; then
     -days 3650 -nodes -subj "/CN=localhost"
 fi
 
-# Pastikan static cert *.isipage.com ada (kalau belum, akan warning di log)
-ls -l /etc/nginx/ssl || true
+# Jalankan Flask di background
+python3 /app/app.py &
 
-# Jalanin nginx
+# Jalankan OpenResty (Nginx)
 openresty -g 'daemon off;'

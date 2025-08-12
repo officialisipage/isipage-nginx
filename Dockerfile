@@ -31,8 +31,13 @@ RUN mkdir -p /var/www/certbot/.well-known/acme-challenge \
 COPY fixperms-and-reload.sh /usr/local/bin/fixperms-and-reload.sh
 RUN chmod +x /usr/local/bin/fixperms-and-reload.sh
 
+# Copy Python app
+COPY python-app /app
+WORKDIR /app
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-EXPOSE 80 443
+EXPOSE 80 443 5000
 CMD ["/entrypoint.sh"]
