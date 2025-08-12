@@ -14,7 +14,6 @@ services:
       - ./nginx/mime.types:/etc/nginx/mime.types:ro
 
       # Data dinamis
-      - ./domains.json:/etc/nginx/domains.json
       - ./data/certbot:/var/lib/certbot
       - ./data/certbot-www:/var/www/certbot
 
