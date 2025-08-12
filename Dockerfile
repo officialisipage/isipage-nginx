@@ -1,6 +1,6 @@
 FROM openresty/openresty:alpine
 
-RUN apk add --no-cache bash certbot curl openssl busybox-suid lua-filesystem python3 py3-pip certbot
+RUN apk add --no-cache bash certbot curl openssl busybox-suid lua-filesystem python3 py3-pip certbot perl
 
 COPY nginx/nginx.conf /etc/nginx/nginx.conf
 COPY nginx/mime.types /etc/nginx/mime.types
