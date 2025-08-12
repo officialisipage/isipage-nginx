@@ -6,8 +6,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      # CONF: pakai conf.d/*.conf (bukan /etc/nginx/nginx.conf)
-      - ./nginx/conf.d/isipage.conf:/etc/nginx/conf.d/isipage.conf:ro
+      # Pakai nginx.conf utama
+      - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
 
       # Lua & mime
       - ./nginx/lua:/etc/nginx/lua:ro
