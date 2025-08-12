@@ -6,7 +6,7 @@ do
   local wf = io.open(whoami_output, "r")
   local who = wf and wf:read("*l") or "(unknown)"
   if wf then wf:close() end
-  ngx.log(ngx.NOTICE, "Script /api/add-domain dijalankan oleh user: " .. who)
+  ngx.log(ngx.ERR, "Script /api/add-domain dijalankan oleh user: " .. who)
 end
 -- ==========================================================
 local function read_body_json()
