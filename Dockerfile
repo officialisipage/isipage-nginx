@@ -33,5 +33,7 @@ RUN chmod +x /usr/local/bin/fixperms-and-reload.sh
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+RUN chmod -R 777 /var/lib/certbot/tmp
+
 EXPOSE 80 443
 CMD ["/entrypoint.sh"]
