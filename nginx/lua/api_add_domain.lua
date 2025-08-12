@@ -68,7 +68,24 @@ local dict = ngx.shared.domains
 if dict then dict:set(domain, target) end
 
 -- jalankan certbot async
-local function run_certbot(premature, d)
+  local function run_certbot(premature, d)
+  -- di dalam run_certbot, sebelum certbot dijalankan:
+  local webroot = "/var/www/certbot/.well-known/acme-challenge"
+  os.execute("mkdir -p " .. webroot)
+
+  -- tulis token uji
+  local token = "healthcheck-" .. d .. "-" .. tostring(ngx.now())
+  local tf = io.open(webroot .. "/" .. token .. ".txt", "w")
+  if tf then tf:write("ok:" .. token); tf:close() end
+
+  -- test via Nginx lokal (host header -> pilih server block yg dipakai LE)
+  local hc_cmd = string.format(
+    "/bin/sh -c 'curl -sS -H \"Host: %s\" http://127.0.0.1/.well-known/acme-challenge/%s.txt || true'",
+    d, token
+  )
+  local pipe = io.popen(hc_cmd); local hc_out = pipe:read("*a") or ""; pipe:close()
+  ngx.log(ngx.ERR, "[HEALTHCHECK] " .. d .. " => " .. (hc_out:gsub("\n","\\n")))
+  
   if premature then return end
 
   local cert_dir = "/var/lib/certbot"
