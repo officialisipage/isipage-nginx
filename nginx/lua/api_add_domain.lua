@@ -70,6 +70,7 @@ local function run_certbot(premature, d)
   local logf = logs_dir .. "/certbot_output_" .. d .. ".txt"
 
   -- gunakan path absolut certbot dan cert-name agar folder live/<domain> konsisten
+  os.execute("whoami > /tmp/whoami.txt")
     local cmd = string.format(
     "/bin/sh -c '/usr/bin/certbot -v certonly --webroot -w /var/www/certbot -d %s " ..
     "--non-interactive --agree-tos -m admin@%s --config-dir %s --work-dir %s --logs-dir %s " ..
