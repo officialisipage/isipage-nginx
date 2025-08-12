@@ -21,7 +21,7 @@ RUN mkdir -p /var/www/certbot/.well-known/acme-challenge \
  && mkdir -p /var/lib/certbot \
  && mkdir -p /var/log/nginx \
  && chmod -R 755 /var/www/certbot \
- && chmod -R 755 /var/log/nginx
+ && chmod -R 755 /var/log/nginx \
  && chmod -R 777 /var/lib/certbot
 
 # (opsional DEV) longgarkan hak supaya certbot gampang nulis
