@@ -1,4 +1,14 @@
 local cjson = require "cjson.safe"
+-- === Tambahan cek siapa user yang menjalankan proses ini ===
+do
+  local whoami_output = "/tmp/whoami_add_domain.txt"
+  os.execute("whoami > " .. whoami_output)
+  local wf = io.open(whoami_output, "r")
+  local who = wf and wf:read("*l") or "(unknown)"
+  if wf then wf:close() end
+  ngx.log(ngx.NOTICE, "Script /api/add-domain dijalankan oleh user: " .. who)
+end
+-- ==========================================================
 local function read_body_json()
   ngx.req.read_body()
   local b = ngx.req.get_body_data()
@@ -58,17 +68,8 @@ local dict = ngx.shared.domains
 if dict then dict:set(domain, target) end
 
 -- jalankan certbot async
--- jalankan certbot async
 local function run_certbot(premature, d)
   if premature then return end
-
-  -- cek siapa yang menjalankan
-  local whoami_output = "/tmp/whoami_certbot.txt"
-  os.execute("whoami > " .. whoami_output)
-  local wf = io.open(whoami_output, "r")
-  local who = wf and wf:read("*l") or "(unknown)"
-  if wf then wf:close() end
-  ngx.log(ngx.NOTICE, "Certbot dijalankan oleh user: " .. who)
 
   local cert_dir = "/var/lib/certbot"
   local logs_dir = cert_dir .. "/logs"
@@ -78,7 +79,8 @@ local function run_certbot(premature, d)
   os.execute("chmod -R 777 " .. cert_dir .. " 2>/dev/null || true")
   local logf = logs_dir .. "/certbot_output_" .. d .. ".txt"
 
-  local cmd = string.format(
+  -- gunakan path absolut certbot dan cert-name agar folder live/<domain> konsisten
+    local cmd = string.format(
     "/bin/sh -c '/usr/bin/certbot -v certonly --webroot -w /var/www/certbot -d %s " ..
     "--non-interactive --agree-tos -m admin@%s --config-dir %s --work-dir %s --logs-dir %s " ..
     "--cert-name %s > %s 2>&1'",
@@ -96,14 +98,18 @@ local function run_certbot(premature, d)
   local fk = io.open(key, "r")
   if fc and fk then
     fc:close(); fk:close()
+    -- kalau Nginx jalan sebagai root, ini opsional:
+    -- os.execute("chmod 644 " .. full .. " 2>/dev/null || true")
+    -- os.execute("chmod 640 " .. key  .. " 2>/dev/null || true")
+
+    -- reload nginx pakai path absolut openresty
     os.execute("/usr/local/openresty/nginx/sbin/nginx -t >/dev/null 2>&1 && /usr/local/openresty/nginx/sbin/nginx -s reload")
     ngx.log(ngx.NOTICE, "Cert issued & nginx reloaded for " .. d)
   else
     local f = io.open(logf, "r"); local out = f and f:read("*a") or "(no output)"; if f then f:close() end
-    ngx.log(ngx.ERR, "Certbot failed for " .. d .. "\n" .. out)
+    ngx.log(ngx.ERR, "Certbot failed for " .. d .. "\\n" .. out)
   end
 end
-
 
 ngx.timer.at(0.05, run_certbot, domain)
 
