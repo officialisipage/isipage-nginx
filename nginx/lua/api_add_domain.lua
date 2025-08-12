@@ -66,18 +66,16 @@ local function run_certbot(premature, d)
   local work_dir = cert_dir .. "/work"
   os.execute("mkdir -p " .. logs_dir .. " " .. work_dir)
 
+  os.execute("chmod -R 777 " .. cert_dir .. " 2>/dev/null || true")
   local logf = logs_dir .. "/certbot_output_" .. d .. ".txt"
 
   -- gunakan path absolut certbot dan cert-name agar folder live/<domain> konsisten
-  local cmd =
-    "/usr/bin/certbot certonly --webroot -w /var/www/certbot" ..
-    " -d " .. d ..
-    " --non-interactive --agree-tos -m admin@" .. d ..
-    " --config-dir " .. cert_dir ..
-    " --work-dir " .. work_dir ..
-    " --logs-dir " .. logs_dir ..
-    " --cert-name " .. d ..
-    " > " .. logf .. " 2>&1"
+    local cmd = string.format(
+    "/bin/sh -c '/usr/bin/certbot certonly --webroot -w /var/www/certbot -d %s " ..
+    "--non-interactive --agree-tos -m admin@%s --config-dir %s --work-dir %s --logs-dir %s " ..
+    "--cert-name %s > %s 2>&1'",
+    d, d, cert_dir, work_dir, logs_dir, d, logf
+  )
 
   local rc = os.execute(cmd)
 
