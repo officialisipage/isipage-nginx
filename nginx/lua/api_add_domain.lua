@@ -1,5 +1,4 @@
 local cjson = require "cjson.safe"
-local lfs   = require "lfs"
 
 ngx.req.read_body()
 local body = ngx.req.get_body_data()
@@ -15,23 +14,25 @@ if not domain or not domain:find("%.") then
   return
 end
 
--- Baca JSON peta domain
+-- baca peta lama
 local path = "/etc/nginx/domains.json"
-local mtime = (lfs.attributes(path) or {}).modification
-local f = io.open(path, "r")
-local content = f and f:read("*a") or "{}"
-if f then f:close() end
-local ok, map = pcall(cjson.decode, content); if not ok or type(map) ~= "table" then map = {} end
+local old = "{}"
+do
+  local f = io.open(path, "r")
+  if f then old = f:read("*a") or "{}"; f:close() end
+end
+local ok, map = pcall(cjson.decode, old)
+if not ok or type(map) ~= "table" then map = {} end
 map[domain] = target
 
--- Tulis atomic
+-- tulis atomic
 local tmp = path .. ".tmp"
 local wf = assert(io.open(tmp, "w"))
 wf:write(cjson.encode(map))
 wf:close()
 os.rename(tmp, path)
 
--- Kick certbot async
+-- certbot async
 local function run_certbot(premature, d)
   if premature then return end
   local cert_dir = "/var/lib/certbot"
@@ -52,7 +53,7 @@ local function run_certbot(premature, d)
     os.execute("chmod 644 " .. live .. "/fullchain.pem 2>/dev/null || true")
     os.execute("chmod 640 " .. live .. "/privkey.pem 2>/dev/null || true")
     os.execute("nginx -s reload")
-    ngx.log(ngx.INFO, "Cert issued for " .. d)
+    ngx.log(ngx.INFO, "Cert issued & nginx reloaded for " .. d)
   else
     local lf = io.open(logf, "r"); local out = lf and lf:read("*a") or "(no output)"; if lf then lf:close() end
     ngx.log(ngx.ERR, "Certbot failed for " .. d .. "\\n" .. out)
