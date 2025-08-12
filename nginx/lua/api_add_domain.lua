@@ -1,7 +1,4 @@
 local cjson = require "cjson.safe"
-local dict  = ngx.shared.domains
-
--- ===== Helper: baca body JSON =====
 local function read_body_json()
   ngx.req.read_body()
   local b = ngx.req.get_body_data()
@@ -9,134 +6,87 @@ local function read_body_json()
   return cjson.decode(b) or {}
 end
 
--- ===== Ambil input =====
 local data = read_body_json()
 local args = ngx.req.get_uri_args() or {}
 
-local domain = data.domain or args.domain
-local target = data.target or args.target or "103.250.11.31:2000"
+local domain = (data.domain or args.domain or "")
+local target = (data.target or args.target or "103.250.11.31:2000")
 
--- Normalisasi: jadikan string kosong jika nil
-if domain == nil then domain = "" end
-if target == nil then target = "" end
-
--- Validasi awal
-if domain == "" or not tostring(domain):find("%.") then
+if domain == "" or not domain:find("%.") then
   ngx.status = 400
-  ngx.header["Content-Type"] = "application/json"
-  ngx.say(cjson.encode({ ok=false, message="Invalid or missing 'domain' parameter" }))
+  ngx.say(cjson.encode({ ok=false, message="Invalid domain" }))
   return
 end
 
--- ===== Helper: atomic write domains.json =====
-local function upsert_domain(filepath, d, t)
-  local json = require "cjson.safe"
-  local map = {}
-  do
-    local f = io.open(filepath, "r")
-    if f then
-      map = json.decode(f:read("*a") or "{}") or {}
-      f:close()
-    end
-  end
-  map[d] = t
-  local out = json.encode(map) or "{}"
-
-  local tmp = filepath .. ".tmp"
-  local f = assert(io.open(tmp, "w"))
-  f:write(out)
-  f:close()
-  os.execute("mv -f " .. tmp .. " " .. filepath)
-end
-
--- ===== Helper: simple lock per-domain (120s) =====
-local function acquire_lock(d)
-  if not d or d == "" then
-    return false, nil, "empty_domain"
-  end
-  if not dict then
-    return true, nil, nil -- tidak ada shared dict; lanjut saja
-  end
-  local key = "certbot_lock:" .. d
-  local ok = dict:add(key, 1, 120) -- lock 120 detik
-  return ok, key, nil
-end
-
-local function release_lock(key)
-  if dict and key then dict:delete(key) end
-end
-
--- ===== Async certbot runner =====
-local function run_certbot(premature, d)
-  if premature then return end
-
-  local CERTBOT   = "/usr/bin/certbot"  -- absolute path
-  local CERT_DIR  = "/var/lib/certbot"
-  local LOGS_DIR  = CERT_DIR .. "/logs"
-  local WORK_DIR  = CERT_DIR .. "/work"
-
-  os.execute("mkdir -p " .. LOGS_DIR .. " " .. WORK_DIR)
-
-  local logf = LOGS_DIR .. "/certbot_" .. d .. ".log"
-
-  local parts = {
-    CERTBOT, "certonly",
-    "--webroot", "-w", "/var/www/certbot",
-    "-d", d,
-    "--non-interactive", "--agree-tos", "-m", "admin@"..d,
-    "--config-dir", CERT_DIR,
-    "--work-dir", WORK_DIR,
-    "--logs-dir", LOGS_DIR,
-    -- "--staging", -- aktifkan untuk uji kalau perlu
-  }
-  local cmd = table.concat(parts, " ") .. " > " .. logf .. " 2>&1"
-
-  os.execute(cmd)
-
-  -- set permission agar Nginx bisa baca
-  local live = CERT_DIR .. "/live/" .. d
-  os.execute("chgrp nginx " .. live .. "/fullchain.pem " .. live .. "/privkey.pem 2>/dev/null || true")
-  os.execute("chmod 644 " .. live .. "/fullchain.pem 2>/dev/null || true")
-  os.execute("chmod 640 " .. live .. "/privkey.pem 2>/dev/null || true")
-
-  ngx.log(ngx.INFO, "✅ Certbot finished for " .. d)
-end
-
--- ===== Simpan domains.json (atomic) + update cache =====
+-- path domains.json
 local filepath = "/etc/nginx/domains.json"
-upsert_domain(filepath, domain, target)
+
+-- pastikan file ada & bisa dibaca
+local content = "{}"
+do
+  local f = io.open(filepath, "r")
+  if f then content = f:read("*a") or "{}"; f:close() end
+end
+
+-- parse & update map
+local ok, map = pcall(cjson.decode, content)
+if not ok or type(map) ~= "table" then map = {} end
+map[domain] = target
+local out = cjson.encode(map)
+
+-- TULIS LANGSUNG TANPA .tmp
+do
+  -- coba buka r+ (edit in-place). kalau belum ada, fallback w+
+  local f = io.open(filepath, "r+")
+  if not f then f = io.open(filepath, "w+") end
+  if not f then
+    ngx.status = 500
+    ngx.say(cjson.encode({ ok=false, message="Cannot open domains.json for write" }))
+    return
+  end
+  f:seek("set", 0)
+  f:write(out)
+  f:flush()
+  -- kalau file sebelumnya lebih panjang, truncate biar bersih
+  local len = #out
+  pcall(function() f:seek("set", len); f:write(""); end)
+  f:close()
+end
+
+-- update cache ringan (opsional)
+local dict = ngx.shared.domains
 if dict then dict:set(domain, target) end
 
--- ===== Lock supaya tidak balapan =====
-local ok_lock, lock_key, lock_err = acquire_lock(domain)
-if not ok_lock then
-  ngx.header["Content-Type"] = "application/json"
-  if lock_err == "empty_domain" then
-    ngx.status = 400
-    ngx.say(cjson.encode({ ok=false, message="Missing 'domain' parameter" }))
+-- jalankan certbot async
+local function run_certbot(premature, d)
+  if premature then return end
+  local cert_dir = "/var/lib/certbot"
+  local logf = "/tmp/certbot_output.txt"
+  local cmd = "certbot certonly --webroot -w /var/www/certbot -d " .. d ..
+              " --non-interactive --agree-tos -m admin@" .. d ..
+              " --expand --logs-dir /tmp --work-dir /tmp --config-dir " .. cert_dir .. logf .. " 2>&1"
+  os.execute(cmd)
+
+  local live = cert_dir .. "/live/" .. d
+  local fc = io.open(live .. "/fullchain.pem", "r")
+  local fk = io.open(live .. "/privkey.pem", "r")
+  if fc and fk then
+    fc:close(); fk:close()
+    -- perbaiki permission agar dibaca nginx (kalau group nginx ada)
+    os.execute("addgroup -S nginx 2>/dev/null || true")
+    os.execute("chgrp -R nginx " .. live .. " 2>/dev/null || true")
+    os.execute("chmod 644 " .. live .. "/fullchain.pem 2>/dev/null || true")
+    os.execute("chmod 640 " .. live .. "/privkey.pem 2>/dev/null || true")
+    -- os.execute("su -c '/usr/local/openresty/nginx/sbin/nginx -s reload' root")
+    ngx.log(ngx.INFO, "✅ Cert issued & nginx reloaded for " .. d)
   else
-    ngx.status = 409
-    ngx.say(cjson.encode({ ok=false, message="Certbot for this domain is already in progress" }))
+    local f = io.open(logf, "r"); local out = f and f:read("*a") or "(no output)"; if f then f:close() end
+    ngx.log(ngx.ERR, "❌ Certbot failed for " .. d .. "\\n" .. out)
   end
-  return
 end
 
--- ===== Jalanin certbot async =====
-local ok, err = ngx.timer.at(0.05, function(premature)
-  local ok2, err2 = pcall(run_certbot, premature, domain)
-  release_lock(lock_key)
-  if not ok2 then
-    ngx.log(ngx.ERR, "❌ Certbot error for " .. tostring(domain) .. ": " .. (err2 or "?"))
-  end
-end)
-if not ok then
-  release_lock(lock_key)
-  ngx.status = 500
-  ngx.header["Content-Type"] = "application/json"
-  ngx.say(cjson.encode({ ok=false, message="Failed to start certbot: "..(err or "?") }))
-  return
-end
+ngx.timer.at(0.05, run_certbot, domain)
 
--- ===== Response =====
 ngx.header["Content-Type"] = "application/json"
 ngx.say(cjson.encode({ ok=true, message="Saved & certbot started", domain=domain, target=target }))
+
