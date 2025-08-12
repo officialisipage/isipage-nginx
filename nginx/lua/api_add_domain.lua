@@ -64,8 +64,7 @@ local function run_certbot(premature, d)
   local logf = "/tmp/certbot_output.txt"
   local cmd = "certbot certonly --webroot -w /var/www/certbot -d " .. d ..
               " --non-interactive --agree-tos -m admin@" .. d ..
-              " --expand --logs-dir /tmp --work-dir /tmp --config-dir " .. cert_dir ..
-              " --no-permissions-check > " .. logf .. " 2>&1"
+              " --expand --logs-dir /tmp --work-dir /tmp --config-dir " .. cert_dir .. logf .. " 2>&1"
   os.execute(cmd)
 
   local live = cert_dir .. "/live/" .. d
