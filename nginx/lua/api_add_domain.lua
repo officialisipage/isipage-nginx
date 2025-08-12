@@ -78,7 +78,7 @@ local function run_certbot(premature, d)
     os.execute("chgrp -R nginx " .. live .. " 2>/dev/null || true")
     os.execute("chmod 644 " .. live .. "/fullchain.pem 2>/dev/null || true")
     os.execute("chmod 640 " .. live .. "/privkey.pem 2>/dev/null || true")
-    os.execute("su -c '/usr/local/openresty/nginx/sbin/nginx -s reload' root")
+    -- os.execute("su -c '/usr/local/openresty/nginx/sbin/nginx -s reload' root")
     ngx.log(ngx.INFO, "✅ Cert issued & nginx reloaded for " .. d)
   else
     local f = io.open(logf, "r"); local out = f and f:read("*a") or "(no output)"; if f then f:close() end
