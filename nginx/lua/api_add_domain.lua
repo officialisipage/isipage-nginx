@@ -85,26 +85,27 @@ if dict then dict:set(domain, target) end
   )
   local pipe = io.popen(hc_cmd); local hc_out = pipe:read("*a") or ""; pipe:close()
   ngx.log(ngx.ERR, "[HEALTHCHECK] " .. d .. " => " .. (hc_out:gsub("\n","\\n")))
-  
+
   if premature then return end
 
   local cert_dir = "/var/lib/certbot"
   local logs_dir = cert_dir .. "/logs"
   local work_dir = cert_dir .. "/work"
   os.execute("mkdir -p " .. logs_dir .. " " .. work_dir)
-
-  os.execute("chmod -R 777 " .. cert_dir .. " 2>/dev/null || true")
   local logf = logs_dir .. "/certbot_output_" .. d .. ".txt"
 
-  -- gunakan path absolut certbot dan cert-name agar folder live/<domain> konsisten
-    local cmd = string.format(
-    "/bin/sh -c '/usr/bin/certbot -v certonly --webroot -w /var/www/certbot -d %s " ..
-    "--non-interactive --agree-tos -m admin@%s --config-dir %s --work-dir %s --logs-dir %s " ..
-    "--cert-name %s > %s 2>&1'",
-    d, d, cert_dir, work_dir, logs_dir, d, logf
-  )
+  -- Pastikan path certbot & versi tercatat
+  os.execute(string.format("/bin/sh -c '/usr/bin/certbot --version >> %s 2>&1 || which certbot >> %s 2>&1'", logf, logf))
 
-  local rc = os.execute(cmd)
+  -- Paksa http-01 di port 80 + tulis EXIT code
+  local cmd = string.format([[
+  /bin/sh -c '/usr/bin/certbot certonly --webroot -w /var/www/certbot \
+  -d %s --non-interactive --agree-tos -m admin@%s \
+  --config-dir %s --work-dir %s --logs-dir %s --cert-name %s \
+  --preferred-challenges http --http-01-port 80 > %s 2>&1; echo "EXIT:$?" >> %s'
+  ]], d, d, cert_dir, work_dir, logs_dir, d, logf, logf)
+
+  os.execute(cmd)
 
   -- cek hasil issuance
   local live = cert_dir .. "/live/" .. d
