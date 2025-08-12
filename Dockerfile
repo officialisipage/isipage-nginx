@@ -32,12 +32,13 @@ COPY fixperms-and-reload.sh /usr/local/bin/fixperms-and-reload.sh
 RUN chmod +x /usr/local/bin/fixperms-and-reload.sh
 
 # Copy Python app
-COPY python-app /app
-WORKDIR /app
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY fixperms-and-reload.sh /fixperms-and-reload.sh
+RUN chmod +x /entrypoint.sh /fixperms-and-reload.sh
 
 EXPOSE 80 443 5000
 CMD ["/entrypoint.sh"]
