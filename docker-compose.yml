@@ -1,22 +1,18 @@
 services:
   openresty:
-    image: openresty/openresty:alpine
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: isipage-nginx:latest
     container_name: isipage-nginx
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      # Pakai nginx.conf utama
-      - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+      # (Opsional) Kalau mau pakai file dari image, HAPUS mount mount di bawah ini.
+      # Hanya mount yang memang perlu jadi data (certbot, domains.json, dll)
 
-      # Lua & mime
-      - ./nginx/lua:/etc/nginx/lua:ro
-      - ./nginx/mime.types:/etc/nginx/mime.types:ro
-
-      # Data dinamis
       - ./data/certbot:/var/lib/certbot
       - ./data/certbot-www:/var/www/certbot
       - ./domains.json:/etc/nginx/domains.json
-
-      # SSL statis & dummy
       - ./nginx/ssl:/etc/nginx/ssl
