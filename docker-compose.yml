@@ -16,6 +16,7 @@ services:
       # Data dinamis
       - ./data/certbot:/var/lib/certbot
       - ./data/certbot-www:/var/www/certbot
+      - ./domains.json:/etc/nginx/domains.json
 
       # SSL statis & dummy
       - ./nginx/ssl:/etc/nginx/ssl
