@@ -6,13 +6,6 @@ mkdir -p /var/www/certbot/.well-known/acme-challenge
 chmod -R 755 /var/www/certbot || true
 mkdir -p /var/lib/certbot
 mkdir -p /var/log/nginx
-# touch /var/log/nginx/access.log /var/log/nginx/error.log
-
-# # domains.json
-# [ -f /etc/nginx/domains.json ] || echo '{}' > /etc/nginx/domains.json
-# addgroup -S nginx 2>/dev/null || true
-# chgrp nginx /etc/nginx/domains.json || true
-# chmod 664 /etc/nginx/domains.json || true
 
 # Dummy cert fallback
 mkdir -p /etc/nginx/ssl
