@@ -17,7 +17,7 @@ RUN mkdir -p /var/lib/certbot \
     && chown 777 /var/www/certbot /var/lib/certbot /var/log/nginx
     && mkdir -p /etc/nginx/ssl \
     && mkdir -p /var/log/nginx \
-    && touch /var/log/nginx/access.log /var/log/nginx/error.log \
+    # && touch /var/log/nginx/access.log /var/log/nginx/error.log \
     
 COPY nginx/ssl /etc/nginx/ssl
 
