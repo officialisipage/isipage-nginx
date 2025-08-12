@@ -22,6 +22,7 @@ RUN mkdir -p /var/www/certbot/.well-known/acme-challenge \
  && mkdir -p /var/log/nginx \
  && chmod -R 755 /var/www/certbot \
  && chmod -R 755 /var/log/nginx
+ && chmod -R 777 /var/lib/certbot
 
 # (opsional DEV) longgarkan hak supaya certbot gampang nulis
 # RUN chmod -R 777 /var/lib/certbot /var/www/certbot
@@ -32,8 +33,6 @@ RUN chmod +x /usr/local/bin/fixperms-and-reload.sh
 
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
-
-RUN chmod -R 777 /var/lib/certbot/tmp
 
 EXPOSE 80 443
 CMD ["/entrypoint.sh"]
