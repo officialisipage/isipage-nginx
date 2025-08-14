@@ -37,7 +37,7 @@ def list_pools():
     return jsonify(ok=True, data=load_json(POOLS_FILE, {}))
 
 @app.post("/api/add-pool")
-def add_domain():
+def add_pool():
     """
     Terima dua format payload:
     1) Baru:   { "domain": "cc.isipage.my.id", "pool": "pool_public" }  # pool opsional
