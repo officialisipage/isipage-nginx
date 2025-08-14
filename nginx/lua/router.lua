@@ -1,43 +1,40 @@
-local cjson = require "cjson.safe"
 local dict_domains = ngx.shared.domains
 local dict_pools   = ngx.shared.pools
+local json         = require "cjson.safe"
 
+-- host yang diminta
 local host = ngx.var.host or ""
 if host == "" then
-  ngx.log(ngx.WARN, "No Host header")
-  return ngx.exit(502)
+  ngx.header["X-Debug-Reason"] = "empty_host"
+  return ngx.exit(400)
 end
 
+-- STRICT: hanya host penuh, tanpa turunan/akar/suffix match
 local poolname = dict_domains:get(host)
+
+-- TIDAK ADA FALLBACK KE pool_public!!
 if not poolname or poolname == "" then
   ngx.header["X-Debug-Reason"] = "domain_not_mapped"
-  return ngx.exit(404)  -- atau 502 sesuai preferensi
+  return ngx.exit(404) -- atau 502 kalau mau
 end
 
--- Ambil daftar backend pool
+-- Ambil backends pool
 local backends_json = dict_pools:get("pool:" .. poolname)
 if not backends_json then
-  ngx.log(ngx.ERR, "Pool '" .. poolname .. "' not found for host: " .. host)
-  ngx.header["X-Debug-Reason"] = "pool_not_found"
+  ngx.header["X-Debug-Reason"] = "pool_not_found:" .. poolname
   return ngx.exit(502)
 end
 
-local backends = cjson.decode(backends_json) or {}
-if #backends == 0 then
-  ngx.log(ngx.ERR, "Pool '" .. poolname .. "' empty for host: " .. host)
-  ngx.header["X-Debug-Reason"] = "pool_empty"
+local backends = json.decode(backends_json) or {}
+if type(backends) ~= "table" or #backends == 0 then
+  ngx.header["X-Debug-Reason"] = "pool_empty:" .. poolname
   return ngx.exit(502)
 end
 
--- Round-robin per pool
-local ckey = "rr:" .. poolname
-local n = #backends
-local idx = dict_pools:incr(ckey, 1, 0)
-local pick = backends[((idx - 1) % n) + 1]
+-- Round-robin sederhana
+local rrkey = "rr:" .. poolname
+local idx   = dict_pools:incr(rrkey, 1, 0)
+local n     = #backends
+local pick  = backends[((idx - 1) % n) + 1]
 
-local upstream = (pick.host or "127.0.0.1") .. ":" .. tostring(pick.port or 80)
-ngx.var.upstream = upstream
-
--- Header debug biar gampang trace
-ngx.header["X-Upstream"] = upstream
-ngx.header["X-Pool"] = poolname
+ngx.var.upstream = (pick.host or "127.0.0.1") .. ":" .. tostring(pick.port or 80)

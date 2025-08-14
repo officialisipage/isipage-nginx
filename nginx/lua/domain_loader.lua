@@ -1,51 +1,34 @@
-local cjson = require("cjson.safe")
-local dict_domains = ngx.shared.domains
-local dict_pools   = ngx.shared.pools
+local cjson = require "cjson.safe"
+local domains_dict = ngx.shared.domains
+local pools_dict   = ngx.shared.pools
 
-local function load_domains()
-  local f = io.open("/etc/nginx/domains.json", "r")
-  if not f then
-    ngx.log(ngx.WARN, "domains.json not found")
-    return
-  end
-  local content = f:read("*a"); f:close()
-  local arr = cjson.decode(content)
-  if type(arr) ~= "table" then
-    ngx.log(ngx.ERR, "domains.json not an array")
-    return
-  end
-  local n = 0
-  for _, item in ipairs(arr) do
-    if type(item) == "table" and item.domain and item.pool then
-      dict_domains:set(item.domain, item.pool)
-      n = n + 1
-    end
-  end
-  ngx.log(ngx.INFO, "Loaded domains.json (" .. tostring(n) .. " entries)")
-end
+-- (Penting) Hapus isi lama supaya wildcard/akar yg dulu tersisa tidak kepakai
+domains_dict:flush_all()
+pools_dict:flush_all()
 
-local function load_pools()
+-- Load pools.json
+do
   local f = io.open("/etc/nginx/pools.json", "r")
-  if not f then
-    ngx.log(ngx.WARN, "pools.json not found")
-    return
-  end
-  local content = f:read("*a"); f:close()
-  local pools = cjson.decode(content)
-  if type(pools) ~= "table" then
-    ngx.log(ngx.ERR, "pools.json invalid")
-    return
-  end
-  local pcount = 0
-  for name, backends in pairs(pools) do
-    if type(backends) == "table" then
-      dict_pools:set("pool:" .. name, cjson.encode(backends))
-      dict_pools:add("rr:" .. name, 0)
-      pcount = pcount + 1
+  if f then
+    local s = f:read("*a"); f:close()
+    local pools = cjson.decode(s) or {}
+    for name, backends in pairs(pools) do
+      pools_dict:set("pool:" .. name, cjson.encode(backends))
     end
   end
-  ngx.log(ngx.INFO, "Loaded pools.json (" .. tostring(pcount) .. " pools)")
 end
 
-load_domains()
-load_pools()
+-- Load domains.json (harus array of { "domain": "...", "pool": "..." })
+do
+  local f = io.open("/etc/nginx/domains.json", "r")
+  if f then
+    local s = f:read("*a"); f:close()
+    local arr = cjson.decode(s) or {}
+    for _, item in ipairs(arr) do
+      if item.domain and item.pool then
+        -- STRICT: simpan apa adanya (FQDN), jangan diubah ke apex/suffix
+        domains_dict:set(item.domain, item.pool)
+      end
+    end
+  end
+end
