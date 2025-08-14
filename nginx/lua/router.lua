@@ -37,4 +37,11 @@ local idx   = dict_pools:incr(rrkey, 1, 0)
 local n     = #backends
 local pick  = backends[((idx - 1) % n) + 1]
 
+-- simpan nama pool ke var Nginx agar bisa dipakai add_header (opsional)
+ngx.var.pool = poolname
+
+-- header debug supaya mudah dites dari curl
+ngx.header["X-Upstream"] = ngx.var.upstream
+ngx.header["X-Pool"]     = poolname
+
 ngx.var.upstream = (pick.host or "127.0.0.1") .. ":" .. tostring(pick.port or 80)
