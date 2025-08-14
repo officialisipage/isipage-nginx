@@ -56,30 +56,44 @@ local function nconn_of(s)
   return n, addr
 end
 
--- pilih LEAST-CONNECTIONS; saat retry, hindari 'avoid' kalau memungkinkan
-local function pick_least_conn()
-  local best_s, best_addr, best_n
+-- RR index per pool utk tie-break saat nconn sama
+local rrkey = "lcrr:" .. poolname
+local rridx = dict_pools:incr(rrkey, 1, 0)
+
+-- LEAST-CONNECTIONS + RR tie-break, hindari 'avoid' saat retry
+local function pick_least_conn_rr()
+  local best = {}
+  local best_n = nil
+
   for _, s in ipairs(healthy) do
     local n, addr = nconn_of(s)
     if not (is_retry and avoid ~= "" and addr == avoid) then
-      if (not best_n) or n < best_n then
-        best_s, best_addr, best_n = s, addr, n
+      if (best_n == nil) or (n < best_n) then
+        best   = { { s = s, addr = addr } }
+        best_n = n
+      elseif n == best_n then
+        table.insert(best, { s = s, addr = addr })
       end
     end
   end
-  if not best_s then
-    -- semua kandidat sama dengan 'avoid' -> pilih yang paling kecil tanpa filter
+
+  if #best == 0 then
     for _, s in ipairs(healthy) do
       local n, addr = nconn_of(s)
-      if (not best_n) or n < best_n then
-        best_s, best_addr, best_n = s, addr, n
+      if (best_n == nil) or (n < best_n) then
+        best   = { { s = s, addr = addr } }
+        best_n = n
+      elseif n == best_n then
+        table.insert(best, { s = s, addr = addr })
       end
     end
   end
-  return best_s, best_addr
+
+  local j = ((rridx - 1) % #best) + 1
+  return best[j].s, best[j].addr
 end
 
-local pick, addr = pick_least_conn()
+local pick, addr = pick_least_conn_rr()
 if not pick or not addr then
   ngx.header["X-Debug-Reason"] = "no_candidate"
   return ngx.exit(502)
