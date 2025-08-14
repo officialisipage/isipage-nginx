@@ -8,10 +8,10 @@ if host == "" then
   return ngx.exit(502)
 end
 
--- Ambil pool by host; default ke pool_public jika tidak ada (sesuai permintaanmu)
 local poolname = dict_domains:get(host)
 if not poolname or poolname == "" then
-  poolname = "pool_public"
+  ngx.header["X-Debug-Reason"] = "domain_not_mapped"
+  return ngx.exit(404)  -- atau 502 sesuai preferensi
 end
 
 -- Ambil daftar backend pool
