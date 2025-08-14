@@ -1,49 +1,80 @@
--- lua/domain_loader.lua
-local cjson = require "cjson.safe"
-local _M = {}
-local domains_shdict = ngx.shared.domains_shdict
+local cjson = require("cjson.safe")
+local dict_domains = ngx.shared.domains
+local dict_pools   = ngx.shared.pools
 
-local function read_file(path)
-  local f, err = io.open(path, "r")
-  if not f then return nil, err end
-  local s = f:read("*a"); f:close()
-  return s
-end
+local function tbl_len(t) local c=0; for _ in pairs(t or {}) do c=c+1 end; return c end
 
-function _M.load_domains(json_path)
-  local s, err = read_file(json_path)
-  if not s then
-    ngx.log(ngx.ERR, "load_domains error: ", err)
-    return nil, err
+local function load_domains()
+  local f = io.open("/etc/nginx/domains.json", "r")
+  if not f then
+    ngx.log(ngx.WARN, "domains.json not found; creating empty")
+    return
   end
-  domains_shdict:set("domains_json", s)
-  return true
-end
-
-function _M.get_pool_for_host(host)
-  if not host or host == "" then return "default" end
-  local s = domains_shdict:get("domains_json")
-  if not s then return "default" end
-  local arr = cjson.decode(s)
-  if type(arr) ~= "table" then return "default" end
-
-  -- exact match
-  for _, row in ipairs(arr) do
-    if row.domain == host then
-      return row.pool or "default"
+  local content = f:read("*a"); f:close()
+  local arr = cjson.decode(content) or {}
+  local count = 0
+  -- format baru: [{ "domain": "...", "pool": "pool_public" }, ...]
+  for _, item in ipairs(arr) do
+    if type(item) == "table" and item.domain and item.pool then
+      dict_domains:set(item.domain, item.pool)
+      count = count + 1
     end
   end
-
-  -- fallback: root-domain match (subdomain → base)
-  local base = host:match("[^.]+%.([^.]+%.[^.]+)$")  -- ambil dua level terakhir
-  if base then
-    for _, row in ipairs(arr) do
-      if row.domain == base then
-        return row.pool or "default"
-      end
-    end
-  end
-  return "default"
+  ngx.log(ngx.INFO, "Loaded domains.json (" .. tostring(count) .. " entries)")
 end
 
-return _M
+local function load_pools()
+  local f = io.open("/etc/nginx/pools.json", "r")
+  if not f then
+    ngx.log(ngx.WARN, "pools.json not found; creating empty")
+    return
+  end
+  local content = f:read("*a"); f:close()
+  local pools = cjson.decode(content) or {}
+  local pcount = 0
+  for name, backends in pairs(pools) do
+    if type(backends) == "table" then
+      dict_pools:set("pool:" .. name, cjson.encode(backends))
+      -- init counter jika belum ada
+      dict_pools:add("rr:" .. name, 0)
+      pcount = pcount + 1
+    end
+  end
+  ngx.log(ngx.INFO, "Loaded pools.json (" .. tostring(pcount) .. " pools)")
+end
+
+local function load_file(path) local f=io.open(path,"r"); if not f then return nil end; local d=f:read("*a"); f:close(); return d end
+local function set_domains(json)
+  local arr = cjson.decode(json) or {}
+  dict_domains:flush_all(); dict_domains:flush_expired()
+  for _, it in ipairs(arr) do
+    if it.domain and it.pool then dict_domains:set(it.domain, it.pool) end
+  end
+end
+local function set_pools(json)
+  local obj = cjson.decode(json) or {}
+  for k,_ in pairs(obj) do dict_pools:delete("pool:"..k) end
+  for name, backs in pairs(obj) do
+    dict_pools:set("pool:"..name, cjson.encode(backs))
+    dict_pools:add("rr:"..name, 0)
+  end
+end
+
+local last_domains_hash, last_pools_hash
+
+local function tick(premature)
+  if premature then return end
+  local domains = load_file("/etc/nginx/domains.json") or "[]"
+  local pools   = load_file("/etc/nginx/pools.json")   or "{}"
+  local dh, ph = ngx.md5(domains), ngx.md5(pools)
+  if dh ~= last_domains_hash then set_domains(domains); last_domains_hash = dh end
+  if ph ~= last_pools_hash   then set_pools(pools);     last_pools_hash   = ph end
+end
+
+-- pertama kali muat + jadwalkan cek setiap 5 detik
+tick(false)
+local ok, err = ngx.timer.every(5, tick)
+if not ok then ngx.log(ngx.ERR, "timer.every failed: ", err) e
+
+load_domains()
+load_pools()
