@@ -17,9 +17,7 @@ fi
 # Siapkan domains.json (array) & pools.json (object) jika belum ada
 if [ ! -f /etc/nginx/domains.json ]; then
   cat >/etc/nginx/domains.json <<'JSON'
-[
-  { "domain": "isipage.my.id", "pool": "pool_public" }
-]
+[]
 JSON
 fi
 
