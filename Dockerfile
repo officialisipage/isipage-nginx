@@ -10,6 +10,7 @@ COPY nginx/nginx.conf /usr/local/openresty/nginx/conf/nginx.conf
 COPY nginx/mime.types /etc/nginx/mime.types
 COPY nginx/lua /etc/nginx/lua
 COPY domains.json /etc/nginx/domains.json
+COPY pools.json /etc/nginx/pools.json
 COPY nginx/ssl /etc/nginx/ssl
 
 # user+group nginx (aman kalau sudah ada)

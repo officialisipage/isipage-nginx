@@ -15,4 +15,5 @@ services:
       - ./data/certbot:/var/lib/certbot
       - ./data/certbot-www:/var/www/certbot
       - ./domains.json:/etc/nginx/domains.json
+      - ./pools.json:/etc/nginx/pools.json
       - ./nginx/ssl:/etc/nginx/ssl
