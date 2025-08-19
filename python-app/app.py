@@ -156,5 +156,158 @@ def add_domain():
     msg = "Domain saved, certbot started, nginx reloaded" if reloaded else "Domain saved, certbot started (nginx reload failed)"
     return jsonify(ok=True, message=msg, domain=domain, pool=pool)
 
+# === util kecil: pastikan domains.json pakai schema baru (list of {domain,pool}) ===
+def _ensure_domains_schema(domains, pools):
+    if isinstance(domains, dict):
+        # konversi map legacy { "a.domain": "host:port" } -> schema baru
+        converted = []
+        for k, v in domains.items():
+            legacy_pool = f"pool__{k}"
+            h, pr = (v, 80)
+            if ":" in v:
+                h, pr_s = v.rsplit(":", 1)
+                try:
+                    pr = int(pr_s)
+                except Exception:
+                    pr = 80
+            pools.setdefault(legacy_pool, [{"host": h, "port": pr}])
+            converted.append({"domain": k, "pool": legacy_pool})
+        save_json(POOLS_FILE, pools)
+        return converted
+    return domains
+
+@app.put("/api/update-domain")
+def update_domain():
+    """
+    Update/rename domain:
+    Body:
+      {
+        "old_domain": "aaa.isipage.my.id",
+        "new_domain": "uuu.isipage.my.id",  # boleh sama dengan old untuk hanya ganti pool
+        "pool": "pool_public"               # optional; kalau kosong/tidak ada -> pool tidak diubah
+      }
+    - Validasi: pool yang diberikan harus ada di pools.json
+    - Jika rename (old != new): certbot dijalankan untuk new_domain (non-blocking)
+    """
+    body = request.get_json(force=True) or {}
+
+    old_domain = (body.get("old_domain") or "").strip().lower()
+    new_domain = (body.get("new_domain") or "").strip().lower()
+    new_pool   = (body.get("pool") or "").strip()
+
+    if "." not in old_domain:
+        return jsonify(ok=False, message="Invalid old_domain"), 400
+    if not new_domain:
+        new_domain = old_domain
+    if "." not in new_domain:
+        return jsonify(ok=False, message="Invalid new_domain"), 400
+
+    pools = load_json(POOLS_FILE, {})
+    domains = load_json(DOMAINS_FILE, [])
+    domains = _ensure_domains_schema(domains, pools)
+
+    # Cari entry lama
+    idx = None
+    for i, item in enumerate(domains):
+        if (item.get("domain") or "").lower() == old_domain:
+            idx = i
+            break
+    if idx is None:
+        return jsonify(ok=False, message=f"Domain '{old_domain}' not found"), 404
+
+    # Update pool jika diberikan dan tidak kosong
+    if new_pool:
+        if new_pool not in pools:
+            return jsonify(ok=False, message=f"Pool '{new_pool}' not found"), 400
+        domains[idx]["pool"] = new_pool
+
+    # Rename domain jika berubah
+    renamed = False
+    if new_domain != old_domain:
+        # Cek apakah new_domain sudah ada; jika ada, kita overwrite (hapus yang lama)
+        existing_idx = None
+        for i, item in enumerate(domains):
+            if (item.get("domain") or "").lower() == new_domain:
+                existing_idx = i
+                break
+        if existing_idx is not None and existing_idx != idx:
+            # gabungkan: gunakan pool dari hasil update (domains[idx])
+            domains[existing_idx]["pool"] = domains[idx]["pool"]
+            # hapus yang old
+            domains.pop(idx)
+        else:
+            domains[idx]["domain"] = new_domain
+        renamed = True
+
+    save_json(DOMAINS_FILE, domains)
+
+    # Jika rename -> jalankan certbot untuk domain baru (non-blocking)
+    if renamed:
+        subprocess.Popen([
+            "/usr/bin/certbot", "certonly", "--webroot", "-w", "/var/www/certbot",
+            "-d", new_domain, "--non-interactive", "--agree-tos", "-m", f"admin@{new_domain}",
+            "--config-dir", CERTBOT_BASE, "--work-dir", f"{CERTBOT_BASE}/work",
+            "--logs-dir", f"{CERTBOT_BASE}/logs", "--cert-name", new_domain
+        ])
+
+    reloaded = nginx_reload()
+    return jsonify(
+        ok=True,
+        message=("Updated & nginx reloaded" if reloaded else "Updated (nginx reload failed)"),
+        old_domain=old_domain,
+        new_domain=new_domain,
+        pool=(new_pool or "unchanged")
+    )
+
+
+@app.delete("/api/delete-domain")
+def delete_domain():
+    """
+    Hapus mapping domain dari domains.json.
+    Body:
+      {
+        "domain": "aaa.isipage.my.id",
+        "remove_cert": false   # optional; jika true maka coba hapus sertifikat LE
+      }
+    Catatan:
+    - pools.json tidak disentuh (pool tetap ada).
+    - Jika remove_cert=true -> jalankan `certbot delete --cert-name <domain>` (non-blocking).
+    """
+    body = request.get_json(force=True) or {}
+    domain = (body.get("domain") or "").strip().lower()
+    remove_cert = bool(body.get("remove_cert", False))
+
+    if "." not in domain:
+        return jsonify(ok=False, message="Invalid domain"), 400
+
+    pools = load_json(POOLS_FILE, {})
+    domains = load_json(DOMAINS_FILE, [])
+    domains = _ensure_domains_schema(domains, pools)
+
+    before = len(domains)
+    domains = [d for d in domains if (d.get("domain") or "").lower() != domain]
+    if len(domains) == before:
+        return jsonify(ok=False, message=f"Domain '{domain}' not found"), 404
+
+    save_json(DOMAINS_FILE, domains)
+
+    # Optional: hapus cert
+    if remove_cert:
+        # Jalankan non-blocking; certbot akan menghapus entry & symlink; direktori bisa tertinggal jika custom config-dir
+        subprocess.Popen([
+            "/usr/bin/certbot", "delete",
+            "--cert-name", domain,
+            "--config-dir", CERTBOT_BASE, "--work-dir", f"{CERTBOT_BASE}/work",
+            "--logs-dir", f"{CERTBOT_BASE}/logs", "-n",  # non-interactive
+        ])
+
+    reloaded = nginx_reload()
+    return jsonify(
+        ok=True,
+        message=("Deleted & nginx reloaded" if reloaded else "Deleted (nginx reload failed)"),
+        domain=domain,
+        remove_cert=remove_cert
+    )
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
