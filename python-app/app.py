@@ -7,6 +7,16 @@ CERTBOT_BASE = "/var/lib/certbot"
 
 app = Flask(__name__)
 
+# === Security: API Key ===
+SECRET_TOKEN = os.environ.get("SECRET_TOKEN", "m1xkekt2epaomzl9s08t")
+
+@app.before_request
+def check_auth():
+    if request.path.startswith("/api/"):
+        token = request.headers.get("X-API-KEY")
+        if token != SECRET_TOKEN:
+            return jsonify(ok=False, message="Forbidden"), 403
+            
 def load_json(path, default):
     try:
         with open(path, "r") as f:
@@ -35,6 +45,17 @@ def list_domains():
 @app.get("/api/pools")
 def list_pools():
     return jsonify(ok=True, data=load_json(POOLS_FILE, {}))
+
+@app.post("/api/reload-nginx")
+def reload_nginx():
+    """
+    Trigger reload nginx secara manual
+    """
+    reloaded = nginx_reload()
+    if reloaded:
+        return jsonify(ok=True, message="Nginx reload success")
+    else:
+        return jsonify(ok=False, message="Nginx reload failed"), 500
 
 @app.post("/api/add-pool")
 def add_pool():
