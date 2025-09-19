@@ -153,7 +153,7 @@ def add_domain():
         domains = converted
         save_json(POOLS_FILE, pools)
 
-    # Update/insert
+    # Update/insert untuk domain utama
     found = False
     for item in domains:
         if item.get("domain") == domain:
@@ -162,6 +162,17 @@ def add_domain():
             break
     if not found:
         domains.append({"domain": domain, "pool": pool})
+
+    # Tambahkan juga untuk www.domain
+    www_domain = f"www.{domain}"
+    found_www = False
+    for item in domains:
+        if item.get("domain") == www_domain:
+            item["pool"] = pool
+            found_www = True
+            break
+    if not found_www:
+        domains.append({"domain": www_domain, "pool": pool})
 
     save_json(DOMAINS_FILE, domains)
 
