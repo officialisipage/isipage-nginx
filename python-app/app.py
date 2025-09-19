@@ -168,7 +168,8 @@ def add_domain():
     # Jalankan certbot di background (biar non-blocking)
     subprocess.Popen([
         "/usr/bin/certbot", "certonly", "--webroot", "-w", "/var/www/certbot",
-        "-d", domain, "--non-interactive", "--agree-tos", "-m", f"admin@{domain}",
+        "-d", domain, "-d", f"www.{domain}",
+        "--non-interactive", "--agree-tos", "-m", f"admin@{domain}",
         "--config-dir", CERTBOT_BASE, "--work-dir", f"{CERTBOT_BASE}/work",
         "--logs-dir", f"{CERTBOT_BASE}/logs", "--cert-name", domain
     ])
@@ -266,7 +267,8 @@ def update_domain():
     if renamed:
         subprocess.Popen([
             "/usr/bin/certbot", "certonly", "--webroot", "-w", "/var/www/certbot",
-            "-d", new_domain, "--non-interactive", "--agree-tos", "-m", f"admin@{new_domain}",
+            "-d", new_domain, "-d", f"www.{new_domain}",
+            "--non-interactive", "--agree-tos", "-m", f"admin@{new_domain}",
             "--config-dir", CERTBOT_BASE, "--work-dir", f"{CERTBOT_BASE}/work",
             "--logs-dir", f"{CERTBOT_BASE}/logs", "--cert-name", new_domain
         ])
