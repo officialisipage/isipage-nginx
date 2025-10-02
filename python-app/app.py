@@ -1,5 +1,12 @@
 from flask import Flask, request, jsonify
 import json, os, subprocess
+import socket
+def has_dns(host):
+    try:
+        socket.getaddrinfo(host, 80)
+        return True
+    except Exception:
+        return False
 
 DOMAINS_FILE = "/etc/nginx/domains.json"  # schema baru: [ { "domain": "...", "pool": "..." }, ... ]
 POOLS_FILE   = "/etc/nginx/pools.json"    # { "pool_name": [ { "host": "...", "port": 1234 }, ... ], ... }
@@ -177,13 +184,22 @@ def add_domain():
     save_json(DOMAINS_FILE, domains)
 
     # Jalankan certbot di background (biar non-blocking)
-    subprocess.Popen([
+    to_issue = [domain]
+    www_domain = f"www.{domain}"
+    if has_dns(www_domain):
+        to_issue.append(www_domain)
+
+    args = [
         "/usr/bin/certbot", "certonly", "--webroot", "-w", "/var/www/certbot",
-        "-d", domain, "-d", f"www.{domain}",
         "--non-interactive", "--agree-tos", "-m", f"admin@{domain}",
         "--config-dir", CERTBOT_BASE, "--work-dir", f"{CERTBOT_BASE}/work",
         "--logs-dir", f"{CERTBOT_BASE}/logs", "--cert-name", domain
-    ])
+    ]
+    for d in to_issue:
+        args.extend(["-d", d])
+
+    subprocess.Popen(args)
+
 
     reloaded = nginx_reload()
     msg = "Domain saved, certbot started, nginx reloaded" if reloaded else "Domain saved, certbot started (nginx reload failed)"
@@ -276,13 +292,22 @@ def update_domain():
 
     # Jika rename -> jalankan certbot untuk domain baru (non-blocking)
     if renamed:
-        subprocess.Popen([
+        to_issue = [new_domain]
+        www_new = f"www.{new_domain}"
+        if has_dns(www_new):
+            to_issue.append(www_new)
+
+        args = [
             "/usr/bin/certbot", "certonly", "--webroot", "-w", "/var/www/certbot",
-            "-d", new_domain, "-d", f"www.{new_domain}",
             "--non-interactive", "--agree-tos", "-m", f"admin@{new_domain}",
             "--config-dir", CERTBOT_BASE, "--work-dir", f"{CERTBOT_BASE}/work",
             "--logs-dir", f"{CERTBOT_BASE}/logs", "--cert-name", new_domain
-        ])
+        ]
+        for d in to_issue:
+            args.extend(["-d", d])
+
+        subprocess.Popen(args)
+
 
     reloaded = nginx_reload()
     return jsonify(
