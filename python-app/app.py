@@ -290,8 +290,8 @@ def update_domain():
 
     save_json(DOMAINS_FILE, domains)
 
-    # Jika rename -> jalankan certbot untuk domain baru (non-blocking)
-    if renamed:
+    # Jalankan certbot kalau rename ATAU DNS www sekarang sudah ada
+    if renamed or has_dns(f"www.{new_domain}"):
         to_issue = [new_domain]
         www_new = f"www.{new_domain}"
         if has_dns(www_new):
@@ -307,6 +307,7 @@ def update_domain():
             args.extend(["-d", d])
 
         subprocess.Popen(args)
+
 
 
     reloaded = nginx_reload()
