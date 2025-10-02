@@ -100,12 +100,6 @@ def add_pool():
 
 @app.post("/api/add-domain")
 def add_domain():
-    """
-    Terima dua format payload:
-    1) Baru: { "domain": "cc.isipage.my.id", "pool": "pool_public" }
-    2) Legacy: { "domain": "cc.isipage.my.id", "target": "103.250.11.31:2000" }
-       -> akan dibuatkan pool khusus: pool__<domain> dengan satu backend
-    """
     body = request.get_json(force=True) or {}
     domain = (body.get("domain") or "").strip().lower()
     pool   = (body.get("pool") or "").strip()
@@ -114,12 +108,9 @@ def add_domain():
     if "." not in domain:
         return jsonify(ok=False, message="Invalid domain"), 400
 
-    # Siapkan pools.json
     pools = load_json(POOLS_FILE, {})
 
-    # Jika masih pakai "target", buat pool khusus untuk domain ini
     if not pool and target:
-        # target bisa "host:port" atau "host" saja
         host = target
         port = 80
         if ":" in target:
@@ -136,31 +127,13 @@ def add_domain():
     if not pool:
         return jsonify(ok=False, message="Missing 'pool' (or legacy 'target')"), 400
 
-    # Pastikan pool yang diminta ada (kecuali barusan dibuat dari 'target')
     if pool not in pools:
         return jsonify(ok=False, message=f"Pool '{pool}' not found"), 400
 
-    # Baca domains.json (schema baru = list of {domain, pool})
     domains = load_json(DOMAINS_FILE, [])
-    # Jika domains.json lama berbentuk dict, konversi
-    if isinstance(domains, dict):
-        # Konversi map {domain: "host:port"} ke schema baru, pakai pool satuan per domain
-        converted = []
-        for k, v in domains.items():
-            legacy_pool = f"pool__{k}"
-            h, pr = (v, 80)
-            if ":" in v:
-                h, pr_s = v.rsplit(":", 1)
-                try:
-                    pr = int(pr_s)
-                except Exception:
-                    pr = 80
-            pools.setdefault(legacy_pool, [{"host": h, "port": pr}])
-            converted.append({"domain": k, "pool": legacy_pool})
-        domains = converted
-        save_json(POOLS_FILE, pools)
+    domains = _ensure_domains_schema(domains, pools)
 
-    # Update/insert untuk domain utama
+    # Update / insert domain utama
     found = False
     for item in domains:
         if item.get("domain") == domain:
@@ -170,24 +143,15 @@ def add_domain():
     if not found:
         domains.append({"domain": domain, "pool": pool})
 
-    # Tambahkan juga untuk www.domain
-    www_domain = f"www.{domain}"
-    found_www = False
-    for item in domains:
-        if item.get("domain") == www_domain:
-            item["pool"] = pool
-            found_www = True
-            break
-    if not found_www:
-        domains.append({"domain": www_domain, "pool": pool})
-
+    # Simpan ke file
     save_json(DOMAINS_FILE, domains)
 
-    # Jalankan certbot di background (biar non-blocking)
+    # --- Certbot ---
     to_issue = [domain]
-    www_domain = f"www.{domain}"
-    if has_dns(www_domain):
-        to_issue.append(www_domain)
+
+    # Kalau apex (contoh: example.com), tambahkan www
+    if domain.count(".") == 1:
+        to_issue.append(f"www.{domain}")
 
     args = [
         "/usr/bin/certbot", "certonly", "--webroot", "-w", "/var/www/certbot",
@@ -199,7 +163,6 @@ def add_domain():
         args.extend(["-d", d])
 
     subprocess.Popen(args)
-
 
     reloaded = nginx_reload()
     msg = "Domain saved, certbot started, nginx reloaded" if reloaded else "Domain saved, certbot started (nginx reload failed)"
@@ -227,17 +190,6 @@ def _ensure_domains_schema(domains, pools):
 
 @app.put("/api/update-domain")
 def update_domain():
-    """
-    Update/rename domain:
-    Body:
-      {
-        "old_domain": "aaa.isipage.my.id",
-        "new_domain": "uuu.isipage.my.id",  # boleh sama dengan old untuk hanya ganti pool
-        "pool": "pool_public"               # optional; kalau kosong/tidak ada -> pool tidak diubah
-      }
-    - Validasi: pool yang diberikan harus ada di pools.json
-    - Jika rename (old != new): certbot dijalankan untuk new_domain (non-blocking)
-    """
     body = request.get_json(force=True) or {}
 
     old_domain = (body.get("old_domain") or "").strip().lower()
@@ -264,7 +216,7 @@ def update_domain():
     if idx is None:
         return jsonify(ok=False, message=f"Domain '{old_domain}' not found"), 404
 
-    # Update pool jika diberikan dan tidak kosong
+    # Update pool
     if new_pool:
         if new_pool not in pools:
             return jsonify(ok=False, message=f"Pool '{new_pool}' not found"), 400
@@ -273,16 +225,13 @@ def update_domain():
     # Rename domain jika berubah
     renamed = False
     if new_domain != old_domain:
-        # Cek apakah new_domain sudah ada; jika ada, kita overwrite (hapus yang lama)
         existing_idx = None
         for i, item in enumerate(domains):
             if (item.get("domain") or "").lower() == new_domain:
                 existing_idx = i
                 break
         if existing_idx is not None and existing_idx != idx:
-            # gabungkan: gunakan pool dari hasil update (domains[idx])
             domains[existing_idx]["pool"] = domains[idx]["pool"]
-            # hapus yang old
             domains.pop(idx)
         else:
             domains[idx]["domain"] = new_domain
@@ -290,12 +239,13 @@ def update_domain():
 
     save_json(DOMAINS_FILE, domains)
 
-    # Jalankan certbot kalau rename ATAU DNS www sekarang sudah ada
-    if renamed or has_dns(f"www.{new_domain}"):
+    # --- Certbot ---
+    if renamed or True:  # selalu coba re-issue
         to_issue = [new_domain]
-        www_new = f"www.{new_domain}"
-        if has_dns(www_new):
-            to_issue.append(www_new)
+
+        # Kalau apex domain → tambahkan www
+        if new_domain.count(".") == 1:
+            to_issue.append(f"www.{new_domain}")
 
         args = [
             "/usr/bin/certbot", "certonly", "--webroot", "-w", "/var/www/certbot",
@@ -307,8 +257,6 @@ def update_domain():
             args.extend(["-d", d])
 
         subprocess.Popen(args)
-
-
 
     reloaded = nginx_reload()
     return jsonify(
