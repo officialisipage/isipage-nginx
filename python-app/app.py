@@ -11,7 +11,16 @@ def has_dns(host):
 DOMAINS_FILE = "/etc/nginx/domains.json"  # schema baru: [ { "domain": "...", "pool": "..." }, ... ]
 POOLS_FILE   = "/etc/nginx/pools.json"    # { "pool_name": [ { "host": "...", "port": 1234 }, ... ], ... }
 CERTBOT_BASE = "/var/lib/certbot"
-
+CERTBOT_LOG_FILE = os.path.join(CERTBOT_BASE, "certbot_failures.log")
+def log_certbot_failure(domain, args, output, error):
+    os.makedirs(os.path.dirname(CERTBOT_LOG_FILE), exist_ok=True)
+    with open(CERTBOT_LOG_FILE, "a") as f:
+        f.write(json.dumps({
+            "domain": domain,
+            "args": args,
+            "stdout": output.strip(),
+            "stderr": error.strip(),
+        }, ensure_ascii=False) + "\n")
 app = Flask(__name__)
 
 # === Security: API Key ===
@@ -63,6 +72,23 @@ def reload_nginx():
         return jsonify(ok=True, message="Nginx reload success")
     else:
         return jsonify(ok=False, message="Nginx reload failed"), 500
+
+@app.get("/api/certbot-logs")
+def get_certbot_logs():
+    limit = int(request.args.get("limit", 50))
+    logs = []
+    try:
+        with open(CERTBOT_LOG_FILE, "r") as f:
+            for line in f:
+                try:
+                    logs.append(json.loads(line))
+                except Exception:
+                    continue
+    except FileNotFoundError:
+        return jsonify(ok=True, data=[], message="No certbot failures yet")
+
+    logs = logs[-limit:]  # ambil terakhir
+    return jsonify(ok=True, data=list(reversed(logs)))
 
 @app.post("/api/add-pool")
 def add_pool():
@@ -162,7 +188,10 @@ def add_domain():
     for d in to_issue:
         args.extend(["-d", d])
 
-    subprocess.Popen(args)
+    proc = subprocess.run(args, capture_output=True, text=True)
+    if proc.returncode != 0:
+        log_certbot_failure(domain, args, proc.stdout, proc.stderr)
+
 
     reloaded = nginx_reload()
     msg = "Domain saved, certbot started, nginx reloaded" if reloaded else "Domain saved, certbot started (nginx reload failed)"
