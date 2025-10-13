@@ -149,8 +149,8 @@ def add_domain():
     # --- Certbot ---
     to_issue = [domain]
 
-    # Kalau apex (contoh: example.com), tambahkan www
-    if domain.count(".") == 1:
+    # Tambahkan www hanya untuk domain custom (bukan isipage.com)
+    if not domain.endswith("isipage.com"):
         to_issue.append(f"www.{domain}")
 
     args = [
@@ -244,8 +244,8 @@ def update_domain():
         to_issue = [new_domain]
 
         # Kalau apex domain → tambahkan www
-        if new_domain.count(".") == 1:
-            to_issue.append(f"www.{new_domain}")
+        if not domain.endswith("isipage.com"):
+            to_issue.append(f"www.{domain}")
 
         args = [
             "/usr/bin/certbot", "certonly", "--webroot", "-w", "/var/www/certbot",
