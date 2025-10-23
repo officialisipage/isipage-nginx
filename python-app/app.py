@@ -1,6 +1,27 @@
 from flask import Flask, request, jsonify
 import json, os, subprocess
 import socket
+from datetime import datetime, timezone
+import shlex
+import platform
+def _extract_flag(args, flag):
+    try:
+        idx = args.index(flag)
+        return args[idx + 1]
+    except Exception:
+        return None
+
+def _extract_multi(args, flag):
+    out = []
+    i = 0
+    while i < len(args):
+        if args[i] == flag and i + 1 < len(args):
+            out.append(args[i + 1])
+            i += 2
+        else:
+            i += 1
+    return out
+
 def has_dns(host):
     try:
         socket.getaddrinfo(host, 80)
@@ -12,15 +33,45 @@ DOMAINS_FILE = "/etc/nginx/domains.json"  # schema baru: [ { "domain": "...", "p
 POOLS_FILE   = "/etc/nginx/pools.json"    # { "pool_name": [ { "host": "...", "port": 1234 }, ... ], ... }
 CERTBOT_BASE = "/var/lib/certbot"
 CERTBOT_LOG_FILE = os.path.join(CERTBOT_BASE, "certbot_failures.log")
-def log_certbot_failure(domain, args, output, error):
+
+def log_certbot_failure(domain, args, output, error, returncode=None, context=None):
     os.makedirs(os.path.dirname(CERTBOT_LOG_FILE), exist_ok=True)
-    with open(CERTBOT_LOG_FILE, "a") as f:
-        f.write(json.dumps({
-            "domain": domain,
-            "args": args,
-            "stdout": output.strip(),
-            "stderr": error.strip(),
-        }, ensure_ascii=False) + "\n")
+    # meta waktu & host
+    ts = datetime.now(timezone.utc).isoformat()
+    hostname = socket.gethostname()
+    # detail argumen certbot
+    email = _extract_flag(args, "-m")
+    webroot = _extract_flag(args, "-w")
+    cert_name = _extract_flag(args, "--cert-name")
+    domains = _extract_multi(args, "-d")
+    # status DNS per domain (supaya cepat terlihat akar masalahnya)
+    dns_status = {d: has_dns(d) for d in (domains or [])}
+    # command string yang aman untuk dibaca
+    cmd_str = " ".join(shlex.quote(str(a)) for a in args)
+    payload = {
+        "timestamp_utc": ts,
+        "hostname": hostname,
+        "platform": {
+            "system": platform.system(),
+            "release": platform.release(),
+            "python": platform.python_version(),
+        },
+        "action_context": context or {},   # misal: {"action": "add-domain"} / {"action": "update-domain"}
+        "domain_primary": domain,
+        "domains": domains,
+        "dns_ok": dns_status,
+        "email": email,
+        "webroot": webroot,
+        "cert_name": cert_name,
+        "command": cmd_str,
+        "returncode": returncode,
+        "stdout": (output or "").strip(),
+        "stderr": (error or "").strip(),
+    }
+
+    with open(CERTBOT_LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
 app = Flask(__name__)
 
 # === Security: API Key ===
@@ -354,7 +405,14 @@ def add_domain():
 
     proc = subprocess.run(args, capture_output=True, text=True)
     if proc.returncode != 0:
-        log_certbot_failure(domain, args, proc.stdout, proc.stderr)
+        log_certbot_failure(
+        domain,
+        args,
+        proc.stdout,
+        proc.stderr,
+        returncode=proc.returncode,
+        context={"action": "add-domain"}
+    )
 
 
     reloaded = nginx_reload()
@@ -433,23 +491,32 @@ def update_domain():
     save_json(DOMAINS_FILE, domains)
 
     # --- Certbot ---
-    if renamed or True:  # selalu coba re-issue
+    if renamed or True:  # tetap re-issue agar cert selalu selaras
         to_issue = [new_domain]
 
-        # Kalau apex domain → tambahkan www
-        if not domain.endswith("isipage.com"):
-            to_issue.append(f"www.{domain}")
+    # Kalau apex domain → tambahkan www
+    if not new_domain.endswith("isipage.com"):
+        to_issue.append(f"www.{new_domain}")
 
-        args = [
-            "/usr/bin/certbot", "certonly", "--webroot", "-w", "/var/www/certbot",
-            "--non-interactive", "--agree-tos", "-m", f"admin@{new_domain}",
-            "--config-dir", CERTBOT_BASE, "--work-dir", f"{CERTBOT_BASE}/work",
-            "--logs-dir", f"{CERTBOT_BASE}/logs", "--cert-name", new_domain
-        ]
-        for d in to_issue:
-            args.extend(["-d", d])
+    args = [
+        "/usr/bin/certbot", "certonly", "--webroot", "-w", "/var/www/certbot",
+        "--non-interactive", "--agree-tos", "-m", f"admin@{new_domain}",
+        "--config-dir", CERTBOT_BASE, "--work-dir", f"{CERTBOT_BASE}/work",
+        "--logs-dir", f"{CERTBOT_BASE}/logs", "--cert-name", new_domain
+    ]
+    for d in to_issue:
+        args.extend(["-d", d])
 
-        subprocess.Popen(args)
+    proc = subprocess.run(args, capture_output=True, text=True)
+    if proc.returncode != 0:
+        log_certbot_failure(
+            new_domain,
+            args,
+            proc.stdout,
+            proc.stderr,
+            returncode=proc.returncode,
+            context={"action": "update-domain", "renamed": renamed, "old_domain": old_domain}
+        )
 
     reloaded = nginx_reload()
     return jsonify(
