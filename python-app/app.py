@@ -123,6 +123,170 @@ def add_pool():
         backends=norm
     )
 
+def _validate_backends(backends):
+    if not isinstance(backends, list) or not backends:
+        return None, "Invalid payload: backends[] must be a non-empty list"
+    norm = []
+    for b in backends:
+        host = (b.get("host") or "").strip()
+        if not host:
+            return None, "backend.host required"
+        try:
+            port = int(b.get("port") or 80)
+        except Exception:
+            return None, "backend.port must be int"
+        norm.append({"host": host, "port": port})
+    return norm, None
+
+def _rename_pool_in_domains(domains, old_name, new_name):
+    changed = False
+    for item in domains:
+        if item.get("pool") == old_name:
+            item["pool"] = new_name
+            changed = True
+    return changed
+
+@app.put("/api/update-pool")
+def update_pool():
+    """
+    Update pool:
+    Body:
+      {
+        "name": "poolA",                 # wajib: nama pool eksisting
+        "new_name": "poolB",             # opsional: rename pool
+        "backends": [ {host,port}, ...], # opsional: replace/merge backends
+        "merge": false                   # opsional: true => gabung (dedup), false => replace
+      }
+    - Jika new_name diberikan, akan rename key pool dan update referensi di domains.json
+    - Jika backends diberikan:
+        * merge=false (default) => replace total
+        * merge=true  => gabung & deduplikasi (host+port)
+    """
+    body = request.get_json(force=True) or {}
+    name = (body.get("name") or "").strip()
+    new_name = (body.get("new_name") or "").strip()
+    backends_body = body.get("backends", None)
+    merge = bool(body.get("merge", False))
+
+    if not name:
+        return jsonify(ok=False, message="Invalid payload: name required"), 400
+
+    pools = load_json(POOLS_FILE, {})
+    if name not in pools:
+        return jsonify(ok=False, message=f"Pool '{name}' not found"), 404
+
+    # Siapkan rename jika diminta
+    if new_name:
+        if new_name in pools and new_name != name:
+            return jsonify(ok=False, message=f"Target pool '{new_name}' already exists"), 400
+
+    # Validasi backends jika ada
+    if backends_body is not None:
+        norm, err = _validate_backends(backends_body)
+        if err:
+            return jsonify(ok=False, message=err), 400
+        if merge:
+            # gabung + dedup
+            existing = pools.get(name, [])
+            merged = existing + norm
+            # dedup berdasar tuple (host,port)
+            seen = set()
+            dedup = []
+            for b in merged:
+                key = (b["host"], int(b["port"]))
+                if key not in seen:
+                    seen.add(key)
+                    dedup.append({"host": b["host"], "port": int(b["port"])})
+            pools[name] = dedup
+        else:
+            pools[name] = [{"host": b["host"], "port": int(b["port"])} for b in norm]
+
+    # Rename key pool (dan referensi di domains)
+    if new_name and new_name != name:
+        pools[new_name] = pools.pop(name)
+        # update domains.json
+        domains = load_json(DOMAINS_FILE, [])
+        domains = _ensure_domains_schema(domains, pools)  # pastikan schema
+        changed = _rename_pool_in_domains(domains, name, new_name)
+        if changed:
+            save_json(DOMAINS_FILE, domains)
+        name = new_name  # set nama aktif
+
+    save_json(POOLS_FILE, pools)
+    reloaded = nginx_reload()
+
+    return jsonify(
+        ok=True,
+        message=("Pool updated & nginx reloaded" if reloaded else "Pool updated (nginx reload failed)"),
+        pool=name,
+        backends=pools.get(name, [])
+    )
+
+@app.delete("/api/delete-pool")
+def delete_pool():
+    """
+    Hapus pool dari pools.json
+    Body:
+      {
+        "name": "poolA",          # wajib
+        "force": false,           # opsional: jika true dan pool dipakai domains, harus reassign_to
+        "reassign_to": "poolB"    # opsional: pool pengganti untuk semua domain yang refer ke 'name'
+      }
+    Aturan:
+    - Jika pool sedang direferensikan oleh domain dan force=false => 409
+    - Jika force=true:
+        * Jika ada referensi, wajib reassign_to dan pool pengganti harus ada
+        * Semua domain yang tadinya ke 'name' akan diarahkan ke 'reassign_to'
+    """
+    body = request.get_json(force=True) or {}
+    name = (body.get("name") or "").strip()
+    force = bool(body.get("force", False))
+    reassign_to = (body.get("reassign_to") or "").strip()
+
+    if not name:
+        return jsonify(ok=False, message="Invalid payload: name required"), 400
+
+    pools = load_json(POOLS_FILE, {})
+    if name not in pools:
+        return jsonify(ok=False, message=f"Pool '{name}' not found"), 404
+
+    domains = load_json(DOMAINS_FILE, [])
+    domains = _ensure_domains_schema(domains, pools)
+
+    # cek referensi
+    refs = [d.get("domain") for d in domains if d.get("pool") == name]
+
+    if refs and not force:
+        return jsonify(
+            ok=False,
+            message=f"Pool '{name}' is referenced by domains; use force=true with reassign_to",
+            references=refs
+        ), 409
+
+    if refs and force:
+        if not reassign_to:
+            return jsonify(ok=False, message="reassign_to required when force=true and pool is referenced"), 400
+        if reassign_to not in pools:
+            return jsonify(ok=False, message=f"Replacement pool '{reassign_to}' not found"), 400
+        # reassign semua domain ke pool pengganti
+        for item in domains:
+            if item.get("pool") == name:
+                item["pool"] = reassign_to
+        save_json(DOMAINS_FILE, domains)
+
+    # hapus pool
+    pools.pop(name, None)
+    save_json(POOLS_FILE, pools)
+
+    reloaded = nginx_reload()
+    return jsonify(
+        ok=True,
+        message=("Pool deleted & nginx reloaded" if reloaded else "Pool deleted (nginx reload failed)"),
+        pool=name,
+        reassigned_to=(reassign_to or None),
+        affected_domains=refs
+    )
+
 
 @app.post("/api/add-domain")
 def add_domain():
