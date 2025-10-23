@@ -20,7 +20,7 @@ local data = read_body_json()
 local args = ngx.req.get_uri_args() or {}
 
 local domain = (data.domain or args.domain or "")
-local target = (data.target or args.target or "103.250.11.31:2000")
+local target = (data.target or args.target or "103.125.181.241:2000")
 
 if domain == "" or not domain:find("%.") then
   ngx.status = 400

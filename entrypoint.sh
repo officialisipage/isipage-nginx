@@ -24,9 +24,9 @@ fi
 if [ ! -f /etc/nginx/pools.json ]; then
   cat >/etc/nginx/pools.json <<'JSON'
 {
-  "pool_public": [ { "host": "103.250.11.31", "port": 2000 } ],
-  "pool_api":    [ { "host": "103.250.11.31", "port": 4000 } ],
-  "pool_fe":     [ { "host": "103.250.11.31", "port": 5173 } ]
+  "pool_public": [ { "host": "103.125.181.241", "port": 2000 } ],
+  "pool_api":    [ { "host": "103.125.181.241", "port": 4000 } ],
+  "pool_fe":     [ { "host": "103.125.181.241", "port": 5173 } ]
 }
 JSON
 fi
