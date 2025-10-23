@@ -4,6 +4,19 @@ import socket
 from datetime import datetime, timezone
 import shlex
 import platform
+import threading
+
+def _run_certbot_async(domain, args, context):
+    proc = subprocess.run(args, capture_output=True, text=True)
+    if proc.returncode != 0:
+        log_certbot_failure(
+            domain,
+            args,
+            proc.stdout,
+            proc.stderr,
+            returncode=proc.returncode,
+            context=context
+        )
 def _extract_flag(args, flag):
     try:
         idx = args.index(flag)
@@ -403,16 +416,22 @@ def add_domain():
     for d in to_issue:
         args.extend(["-d", d])
 
-    proc = subprocess.run(args, capture_output=True, text=True)
-    if proc.returncode != 0:
-        log_certbot_failure(
-        domain,
-        args,
-        proc.stdout,
-        proc.stderr,
-        returncode=proc.returncode,
-        context={"action": "add-domain"}
-    )
+    # proc = subprocess.run(args, capture_output=True, text=True)
+    # if proc.returncode != 0:
+    #     log_certbot_failure(
+    #     domain,
+    #     args,
+    #     proc.stdout,
+    #     proc.stderr,
+    #     returncode=proc.returncode,
+    #     context={"action": "add-domain"}
+    # )
+    # jadi async:
+    threading.Thread(
+        target=_run_certbot_async,
+        args=(domain, args, {"action": "add-domain"}),
+        daemon=True
+    ).start()
 
 
     reloaded = nginx_reload()
@@ -507,16 +526,21 @@ def update_domain():
     for d in to_issue:
         args.extend(["-d", d])
 
-    proc = subprocess.run(args, capture_output=True, text=True)
-    if proc.returncode != 0:
-        log_certbot_failure(
-            new_domain,
-            args,
-            proc.stdout,
-            proc.stderr,
-            returncode=proc.returncode,
-            context={"action": "update-domain", "renamed": renamed, "old_domain": old_domain}
-        )
+    # proc = subprocess.run(args, capture_output=True, text=True)
+    # if proc.returncode != 0:
+    #     log_certbot_failure(
+    #         new_domain,
+    #         args,
+    #         proc.stdout,
+    #         proc.stderr,
+    #         returncode=proc.returncode,
+    #         context={"action": "update-domain", "renamed": renamed, "old_domain": old_domain}
+    #     )
+    threading.Thread(
+        target=_run_certbot_async,
+        args=(new_domain, args, {"action": "update-domain"}),
+        daemon=True
+    ).start()
 
     reloaded = nginx_reload()
     return jsonify(
